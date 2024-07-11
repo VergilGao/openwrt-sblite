@@ -3,7 +3,7 @@
 import { cursor } from 'uci';
 import { PKG_NAME, CONF_NAME as config_name } from './const.uc';
 import { wget, log_t, log_tab } from './utils.uc';
-import { parse as vmess_parse } from './subscribe/vmess.uc';
+import { parse as vmess_parse } from './protocols/vmess.uc';
 
 function subscribe_one(section, results) {
     if (!results) {

@@ -97,17 +97,17 @@ return view.extend({
         o.rmempty = false;
         o.default = false;
 
-        render_dns_tab(map, s);
-        render_outbound_tab(map, s, wanInterfaces, lanInterfaces);
-        render_nodes_tab(map, s);
-        render_subscription_tab(map, s);
-        render_custom_rule_tab(map, s);
+        render_dns_tab(s);
+        render_outbound_tab(s, wanInterfaces, lanInterfaces);
+        render_nodes_tab(s);
+        render_subscription_tab(s);
+        render_rule_set_tab(s);
 
         return map.render();
     },
 });
 
-function render_dns_tab(map, parent) {
+function render_dns_tab(parent) {
     const tabName = 'dns';
     let s, o;
 
@@ -155,7 +155,7 @@ function render_dns_tab(map, parent) {
     s.anonymous = true;
 }
 
-function render_outbound_tab(map, parent, wanInterfaces, lanInterfaces) {
+function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
     const tabName = 'outbound';
     let s, o;
 
@@ -164,33 +164,78 @@ function render_outbound_tab(map, parent, wanInterfaces, lanInterfaces) {
     s = parent.taboption(
         tabName,
         form.SectionValue,
-        'wan_list',
+        'outbounds',
         form.GridSection,
-        'wan',
-        _('WAN List'),
-        _('Direct outbound interfaces.'))
+        'outbound')
         .subsection;
     s.addremove = true;
     s.anonymous = true;
 
     s.modaltitle = function (section_id) {
         let name = uci.get(config_name, section_id, 'name');
-        return _('WAN Configuration') + ' » ' + (name ?? _('unamed interface'));
+        return _('Outbound Configuration') + ' » ' + (name ?? _('unamed interface'));
     };
 
-    o = s.option(form.Value, 'tag', _('Outbound Tag'));
-    o.rmempty = false;
-    o.datatype = 'string';
+    s.addModalOptions = function (s, section_id) {
+        o = s.option(form.Value, 'tag', _('Outbound Tag'));
+        o.rmempty = false;
+        o.datatype = 'string';
 
-    o = s.option(form.ListValue, 'interface', _('Interface'));
-    o.rmempty = false;
-    wanInterfaces.forEach(element => {
-        let ifname = element.getIfname();
-        o.value(ifname, `${element.sid} (${ifname})`);
-    });
+        o = s.option(form.ListValue, 'type', _('Outbound Type'));
+        o.rmempty = false;
+        o.datatype = 'string';
+        o.value('direct', _('Direct'));
+        o.value('node', _('Node'));
+        o.default = 'direct';
+
+        o = s.option(form.ListValue, 'interface', _('Outbound Interface'));
+        o.rmempty = false;
+        o.depends('type', 'direct');
+        wanInterfaces.forEach(element => {
+            let ifname = element.getIfname();
+            o.value(ifname, `${element.sid} (${ifname})`);
+        });
+
+        o = s.option(form.ListValue, 'node', _('Outbound Node'));
+        o.rmempty = false;
+        o.depends('type', 'node');
+        uci.sections(config_name, 'node', function (s, section_id) {
+            let value = section_id;
+            if (s.group) {
+                value = s.hashkey;
+            }
+            o.value(value, `${s.alias}`);
+        });
+    };
+
+    s.sectiontitle = section_id => uci.get(config_name, section_id, 'tag');
+    o = s.option(form.DummyValue, 'outbound_config', _('Outbound Config'));
+    o.modalonly = false;
+    o.textvalue = function (section_id) {
+        const type = uci.get(config_name, section_id, 'type');
+        switch (type) {
+            case 'direct':
+                const ifname = uci.get(config_name, section_id, 'interface');
+                const element = wanInterfaces.find(element => element.getIfname() === ifname);
+                return `${element.sid} (${ifname})`;
+
+            case 'node':
+                let node = uci.get(config_name, section_id, 'node');
+                if (!node.startsWith('cfg')) {
+                    uci.sections(config_name, 'node', function (s, section_id) {
+                        if (s.group && s.hashkey === node) {
+                            node = section_id;
+                        }
+                    });
+                }
+                return uci.get(config_name, node, 'alias');
+            default: return 'unkown';
+        }
+    };
+
 }
 
-function render_nodes_tab(map, parent) {
+function render_nodes_tab(parent) {
     const tabName = 'nodes';
     let s, o;
 
@@ -254,7 +299,7 @@ function render_nodes_tab(map, parent) {
                     click: ui.createHandlerFn(this, function (section_id) {
                         uci.unset(config_name, section_id, 'group');
                         uci.unset(config_name, section_id, 'hashkey');
-                        return map.save(null, true);
+                        return parent.map.save(null, true);
                     }, section_id),
                     title: _('Unbind this node from the subscription'),
                 }, _('Unbind')),
@@ -280,7 +325,7 @@ function render_nodes_tab(map, parent) {
     };
 }
 
-function render_subscription_tab(map, parent) {
+function render_subscription_tab(parent) {
     const tabName = 'subscription';
     let s, o;
 
@@ -429,11 +474,11 @@ function render_subscription_tab(map, parent) {
                 const outbounds = uci.sections(config_name, 'node');
                 outbounds.forEach(section => {
                     if (section.group === section_id) {
-                        map.data.remove(config_name, section['.name']);
+                        parent.map.data.remove(config_name, section['.name']);
                     }
                 });
 
-                return map.save(null, true);
+                return parent.map.save(null, true);
             }, section_id),
             title: _('Delete Subscribe Nodes'),
         }, _('Delete Subscribe Nodes'));
@@ -463,18 +508,18 @@ function render_subscription_tab(map, parent) {
 
                 //await map.load();
 
-                return map.save(null, true);
+                return parent.map.save(null, true);
             }),
             title: _('Manual Subscribe'),
         }, _('Manual Subscribe'));
     };
 }
 
-function render_custom_rule_tab(map, parent) {
-    const tabName = 'custom_rules';
+function render_rule_set_tab(parent) {
+    const tabName = 'rule_set';
     let s, o;
 
-    parent.tab(tabName, _('Custom Rules'));
+    parent.tab(tabName, _('Rule Set'));
 
     const logical_mode_selections = {
         '0': _('Close'),
@@ -496,81 +541,121 @@ function render_custom_rule_tab(map, parent) {
         'BitTorrent': _('BitTorrent'),
     };
 
-    function addModalOptions(s, section_id, sub) {
-        if (!sub) {
-            o = s.option(form.Flag, ENABLE_CONFIG_NAME, _('Enable'), _('Enable this route rule.'));
-            o.rmempty = false;
-            o.default = true;
-        }
+    const rule_set_type_selections = {
+        'inline': _('Inline'),
+        'local': _('Local File'),
+        'remote': _('Remote File'),
+    };
 
-        o = s.option(form.Flag, 'invert', _('Invert'), _('Invert match result.'));
+    const format_selections = {
+        'binary': _('Binary Format'),
+        'source': _('Source Format'),
+    };
+
+    o = parent.taboption(tabName, form.DummyValue, '_description_text', '');
+    o.cfgvalue = function (section_id) {
+        return E('div', `${_('The default rule uses the following matching logic:')}
+        ${_('Network')} && ${_('Protocol')} && ${_('Source IP')} && ${_('Source Port')} &&
+        ${_('Dest IP')} && ${_('Dest Port')} && ${_('Domain List')}`);
+    };
+
+    o.cfgvalue = function () {
+        return E('div', `${_('see document <a herf="https://sing-box.sagernet.org/zh/configuration/rule-set/">here</a>')}`);
+    };
+    o.write = function () { };
+
+    s = parent.taboption(tabName, form.SectionValue, 'rule_set', form.GridSection, 'rule_set').subsection;
+    s.addremove = true;
+    s.sortable = true;
+    //s.description = E('div', { style: 'color:red' }, _('Please note attention to the priority, the higher the order, the higher the priority.'));
+
+    s.modaltitle = section_id => `${_('Rule Set Configuration')} » ${section_id}`;
+
+    s.addModalOptions = function (s, section_id) {
+        o = s.option(form.ListValue, 'type', _('Rule Set Type'));
+        Object.keys(rule_set_type_selections).forEach(key => o.value(key, rule_set_type_selections[key]));
+
+        o = s.option(form.ListValue, 'format', _('Rule Set Format'));
+        o.depends('type', 'local');
+        o.depends('type', 'remote');
+        Object.keys(format_selections).forEach(key => o.value(key, format_selections[key]));
+
+        o = s.option(form.Value, 'path', _('File Path'));
+        o.depends('type', 'local');
+
+        o = s.option(form.Value, 'url', _('Download URL'));
+        o.depends('type', 'remote');
+
+        o = s.option(form.Flag, 'default_detour', _('Default Outbound'), _('Use default outbound to download rule-set.'));
+        o.depends('type', 'remote');
+        o.default = true;
+
+        o = s.option(form.ListValue, 'download_detour', _('Outbound'), _('Tag of the outbound to download rule-set.'));
+        o.depends('default_detour', '0');
+        uci.sections(config_name, 'outbound', function (s, section_id) {
+            o.value(s.tag);
+        });
+
+        o = s.option(form.Flag, 'sub', _('Sub Rule Set'), _('Is this part of another rule set.'));
+        o.depends('type', 'inline');
         o.rmempty = false;
 
-        if (!sub) {
-            o = s.option(form.ListValue, 'outbound', _('Outbound'));
-            o.rmempty = false;
-            o.description = `${_('Tag of the Target Outbound')}<br />
-                - ${_('Disable')}: ${_('This rule will not take effect')}<br />
-                - ${_('Block')}: ${_('block outbound closes all incoming requests')}`;
+        o = s.option(form.Flag, 'invert', _('Invert'), _('Invert match result.'));
+        o.depends('type', 'inline');
+        o.rmempty = false;
 
-            o.value('disable', _('Disable'));
-            uci.sections(config_name, 'wan').forEach(element => {
-                o.value(element.tag);
-            });
-            o.value('block', _('Block'));
+        let sub_rules = [];
 
-            let sub_rules = [];
+        uci.sections(config_name, 'rule_set').forEach(element => {
+            if (element.sub === '1' && element['.name'] !== section_id)
+                sub_rules.push(element['.name']);
+        });
 
-            uci.sections(config_name, 'sub_rules').forEach(element => {
-                if (element.sub === '1' && element['.name'] !== section_id)
-                    sub_rules.push(element['.name']);
-            });
+        if (sub_rules.length > 1) {
+            o = s.option(form.ListValue, 'logical_mode', _('Logical Mode'));
+            o.depends({ sub: '0', type: 'inline' });
+            Object.keys(logical_mode_selections).forEach(key => o.value(key, logical_mode_selections[key]));
 
-            if (sub_rules.length > 1) {
-                o = s.option(form.ListValue, 'logical_mode', _('Logical Mode'));
-                Object.keys(logical_mode_selections).forEach(key => o.value(key, logical_mode_selections[key]));
-
-                o = s.option(form.MultiValue, 'sub_rule', _('Sub rules'));
-                o.depends('logical_mode', '1');
-                o.depends('logical_mode', '2');
-                o.modalonly = true;
-                sub_rules.forEach(element => o.value(element));
-            } else {
-                uci.set(config_name, section_id, 'logical_mode', 0);
-            }
+            o = s.option(form.MultiValue, 'sub_rule', _('Sub rules'));
+            o.depends('logical_mode', '1');
+            o.depends('logical_mode', '2');
+            o.modalonly = true;
+            sub_rules.forEach(element => o.value(element));
+        } else {
+            uci.set(config_name, section_id, 'logical_mode', 0);
         }
 
         o = s.option(form.ListValue, 'network', _('Network'));
-        o.depends('logical_mode', '0');
-        o.depends('logical_mode', undefined);
+        o.depends({ logical_mode: '0', type: 'inline' });
+        o.depends({ logical_mode: undefined, type: 'inline' });
         Object.keys(network_selections).forEach(key => o.value(key, network_selections[key]));
 
         o = s.option(form.MultiValue, 'protocol', _('Protocol'));
-        o.depends('logical_mode', '0');
-        o.depends('logical_mode', undefined);
+        o.depends({ logical_mode: '0', type: 'inline' });
+        o.depends({ logical_mode: undefined, type: 'inline' });
         Object.keys(protocol_selections).forEach(key => o.value(key, protocol_selections[key]));
 
         o = s.option(form.DynamicList, 'source', _('Source IP'), `${_('Example')}:<br />- ${_('IP')}: 192.168.1.100<br />- ${_('IP CIDR')}: 192.168.1.0/24`);
-        o.depends('logical_mode', '0');
-        o.depends('logical_mode', undefined);
+        o.depends({ logical_mode: '0', type: 'inline' });
+        o.depends({ logical_mode: undefined, type: 'inline' });
         o.datatype = 'ipaddr';
         o = s.option(form.DynamicList, 'source_port', _('Source Port'), `${_('Example')}:<br />- ${_('Port')}: 80<br />- ${_('Range')}: 1000-2000`);
-        o.depends('logical_mode', '0');
-        o.depends('logical_mode', undefined);
+        o.depends({ logical_mode: '0', type: 'inline' });
+        o.depends({ logical_mode: undefined, type: 'inline' });
         o.datatype = 'portrange';
 
         o = s.option(form.DynamicList, 'dest', _('Dest IP'), `${_('Example')}:<br />- ${_('IP')}: 192.168.1.100<br />- ${_('IP CIDR')}: 192.168.1.0/24`);
-        o.depends('logical_mode', '0');
-        o.depends('logical_mode', undefined);
+        o.depends({ logical_mode: '0', type: 'inline' });
+        o.depends({ logical_mode: undefined, type: 'inline' });
         o.datatype = 'ipaddr';
         o = s.option(form.DynamicList, 'dest_port', _('Dest Port'), `${_('Example')}:<br />- ${_('Port')}: 80<br />- ${_('Range')}: 1000-2000`);
-        o.depends('logical_mode', '0');
-        o.depends('logical_mode', undefined);
+        o.depends({ logical_mode: '0', type: 'inline' });
+        o.depends({ logical_mode: undefined, type: 'inline' });
         o.datatype = 'portrange';
 
         o = s.option(form.TextValue, 'domain', _('Domain List'));
-        o.depends('logical_mode', '0');
-        o.depends('logical_mode', undefined);
+        o.depends({ logical_mode: '0', type: 'inline' });
+        o.depends({ logical_mode: undefined, type: 'inline' });
         o.description = `${_('Each line is parsed as a rule')}:<br />
             - ${_('Start with #')}: ${_('Comments')}<br />
             - ${_('Start with domain')}: ${_('Match full domain')}<br />
@@ -603,122 +688,87 @@ function render_custom_rule_tab(map, parent) {
 
             return true;
         };
-    }
-
-    function ruleDescription(section_id) {
+    };
+    o = s.option(form.DummyValue, '_rule_set_view');
+    o.modalonly = false;
+    o.textvalue = function (section_id) {
         const description = [];
 
-        const logical_mode = uci.get(config_name, section_id, 'logical_mode');
-
-        if (logical_mode && logical_mode !== '0') {
-            description.push(
-                E('br'),
-                E('b', `${_('Logical Mode')}: `),
-                logical_mode_selections[logical_mode],
-            );
-
-            description.push(
-                E('br'),
-                E('b', `${_('Sub rules')}: `),
-                uci.get(config_name, section_id, 'sub_rule').join(', '),
-            );
-        } else {
-            const network = uci.get(config_name, section_id, 'network') ?? '0';
-            const protocols = uci.get(config_name, section_id, 'protocol');
-
-            description.push(
-                E('br'),
-                E('b', `${_('Network')}: `),
-                network_selections[network],
-            );
-
-            if (protocols) {
-                description.push(
-                    E('br'),
-                    E('b', `${_('Protocol')}: `),
-                    protocols.join(', '),
-                );
-            }
-        }
+        const type = uci.get(config_name, section_id, 'type');
 
         description.push(
             E('br'),
-            E('b', `${_('Invert')}: `),
-            `${uci.get(config_name, section_id, 'invert') === '1' ? _('Yes') : _('No')}`,
+            E('b', `${_('Rule Set Type')}: `),
+            `${rule_set_type_selections[type]}`,
         );
 
+        if (type !== 'inline') {
+            description.push(
+                E('br'),
+                E('b', `${_('Rule Set Format')}: `),
+                `${format_selections[uci.get(config_name, section_id, 'format')]}`,
+            );
+        }
+
+        if (type === 'local') {
+            description.push(
+                E('br'),
+                E('b', `${_('File Path')}: `),
+                uci.get(config_name, section_id, 'path'),
+            );
+        } else if (type === 'remote') {
+            description.push(
+                E('br'),
+                E('b', `${_('Download Url')}: `),
+                uci.get(config_name, section_id, 'url'),
+            );
+        } else if (type === 'inline') {
+            description.push(
+                E('br'),
+                E('b', `${_('Sub Rule Set')}: `),
+                `${uci.get(config_name, section_id, 'sub') === '1' ? _('Yes') : _('No')}`,
+            );
+
+            const logical_mode = uci.get(config_name, section_id, 'logical_mode');
+
+            if (logical_mode && logical_mode !== '0') {
+                description.push(
+                    E('br'),
+                    E('b', `${_('Logical Mode')}: `),
+                    logical_mode_selections[logical_mode],
+                );
+
+                description.push(
+                    E('br'),
+                    E('b', `${_('Sub rules')}: `),
+                    uci.get(config_name, section_id, 'sub_rule').join(', '),
+                );
+            } else {
+                const network = uci.get(config_name, section_id, 'network') ?? '0';
+                const protocols = uci.get(config_name, section_id, 'protocol');
+
+                description.push(
+                    E('br'),
+                    E('b', `${_('Network')}: `),
+                    network_selections[network],
+                );
+
+                if (protocols) {
+                    description.push(
+                        E('br'),
+                        E('b', `${_('Protocol')}: `),
+                        protocols.join(', '),
+                    );
+                }
+            }
+
+            description.push(
+                E('br'),
+                E('b', `${_('Invert')}: `),
+                `${uci.get(config_name, section_id, 'invert') === '1' ? _('Yes') : _('No')}`,
+            );
+        }
+
         return E('div', description);
-    }
-
-    o = parent.taboption(tabName, form.DummyValue, '_description_text', '');
-    o.cfgvalue = function (section_id) {
-        return E('div', `${_('The default rule uses the following matching logic:')}
-        ${_('Network')} && ${_('Protocol')} && ${_('Source IP')} && ${_('Source Port')} &&
-        ${_('Dest IP')} && ${_('Dest Port')} && ${_('Domain List')}`);
     };
-    o.write = function () { };
-
-    s = parent.taboption(
-        tabName,
-        form.SectionValue,
-        'custom_rules',
-        form.GridSection,
-        'custom_rules',
-        _('Custom Rules'))
-        .subsection;
-    s.addremove = true;
-    s.sortable = true;
-    s.description = E('div', { style: 'color:red' }, _('Please note attention to the priority, the higher the order, the higher the priority.'));
-
-    s.modaltitle = section_id => `${_('Rule Configuration')} » ${section_id}`;
-
-    s.addModalOptions = function (s, section_id) {
-        return addModalOptions(s, section_id, false);
-    };
-    o = s.option(form.DummyValue, '_rule_view');
-    o.modalonly = false;
-    o.textvalue = ruleDescription;
-
-    s.renderRowActions = function (section_id) {
-        let tdEl = this.super('renderRowActions', [section_id, _('Edit')]);
-
-        const enabled = uci.get(config_name, section_id, ENABLE_CONFIG_NAME) === '1';
-        dom.content(tdEl.lastChild, [
-            tdEl.lastChild.childNodes[0],
-            E('button', {
-                class: enabled ? 'btn cbi-button-positive' : 'btn cbi-button-negative',
-                click: ui.createHandlerFn(this, function (section_id, enabled) {
-                    uci.set(config_name, section_id, ENABLE_CONFIG_NAME, enabled ? '1' : '0');
-                    map.save(null, true);
-                }, section_id, !enabled),
-                title: !enabled ? _('Enable') : _('Disable'),
-            }, enabled ? _('Enabled') : _('Disabled')),
-            tdEl.lastChild.childNodes[1],
-            tdEl.lastChild.childNodes[2],
-        ]);
-
-        return tdEl;
-    };
-
-    s = parent.taboption(
-        tabName,
-        form.SectionValue,
-        'sub_rules',
-        form.GridSection,
-        'sub_rules',
-        _('Sub Rules'),
-        _(''))
-        .subsection;
-    s.addremove = true;
-    s.sortable = false;
-
-    s.modaltitle = (section_id) => `${_('Sub Rule Configuration')} » ${section_id}`;
-
-    s.addModalOptions = function (s, section_id) {
-        return addModalOptions(s, section_id, true);
-    };
-
-    o = s.option(form.DummyValue, '_rule_view');
-    o.modalonly = false;
-    o.textvalue = ruleDescription;
 }
