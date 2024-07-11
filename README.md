@@ -10,12 +10,12 @@ This repository is under development and cannot be used properly.
 
 ## TODO:
 
-[ ] init.d script
-[ ] sing-box config generate
-[ ] subscribe cron job
-[ ] Makefile
-[ ] DNS config
-[ ] Rule set
+- [ ] init.d script
+- [ ] sing-box config generate
+- [ ] subscribe cron job
+- [ ] Makefile
+- [ ] DNS config
+- [ ] Rule set
 
 ## Tanks
 
