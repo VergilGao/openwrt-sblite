@@ -14,12 +14,8 @@ const ENABLE_CONFIG_NAME = 'enable';
 const callSubscribe = rpc.declare({
     object: 'luci.sblite',
     method: 'subscribe',
+    params: ['section_id'],
     expect: { '': {} }
-});
-
-const callClearlog = rpc.declare({
-    object: 'luci.sblite',
-    method: 'clear_log',
 });
 
 const modalStyle = '  height:50%; width:50%;  position:absolute; top:20%; left:25%; background-color:#800080; border-radius: 15px;';
@@ -106,7 +102,6 @@ return view.extend({
         render_nodes_tab(map, s);
         render_subscription_tab(map, s);
         render_custom_rule_tab(map, s);
-        render_log_tab(map, s);
 
         return map.render();
     },
@@ -451,7 +446,7 @@ function render_subscription_tab(map, parent) {
             class: 'btn cbi-button-positive',
             click: ui.createHandlerFn(this, async function () {
                 try {
-                    const res = await callSubscribe();
+                    const res = await callSubscribe(section_id);
                     uci.unload(config_name);
                     await uci.load(config_name);
                     const arr = Object.keys(res).map(key => `${res[key].alias} [${res[key].address}:${res[key].port}]`);
@@ -726,23 +721,4 @@ function render_custom_rule_tab(map, parent) {
     o = s.option(form.DummyValue, '_rule_view');
     o.modalonly = false;
     o.textvalue = ruleDescription;
-}
-
-function render_log_tab(map, parent) {
-    const tabName = 'log';
-    let s, o;
-
-    parent.tab(tabName, _('Log'));
-
-    //o = parent.taboption(tabName, form.ButtonValue, 'clear_log', _('Clear Log'));
-    //o.onclick = async () => await callClearlog();
-
-    o = parent.taboption(tabName, form.TextValue, 'log_content', '');
-    o.monospace = true;
-    o.rows = 25;
-    o.cfgvalue = function (section_id) {
-        return fs.trimmed('/tmp/log/sblite.log');
-    };
-
-    o.write = {};
 }

@@ -4,14 +4,9 @@ import * as app from '/usr/share/sblite/export.uc';
 
 const methods = {
     subscribe: {
-        call: function () {
-            return app.subscribe();
-        }
-    },
-
-    clear_log: {
-        call: function () {
-            return app.clear_log();
+        args: { section_id: 'section_id' },
+        call: function (req) {
+            return app.subscribe(req.args?.section_id);
         }
     },
 };

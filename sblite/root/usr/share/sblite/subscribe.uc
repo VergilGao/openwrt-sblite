@@ -5,68 +5,85 @@ import { PKG_NAME, CONF_NAME as config_name } from './const.uc';
 import { wget, log_t, log_tab } from './utils.uc';
 import { parse as vmess_parse } from './subscribe/vmess.uc';
 
-export function subscribe() {
-    log_t('subscribe starting...');
+function subscribe_one(section, results) {
+    if (!results) {
+        results = {};
+    }
+
+    const group = section['.name'];
+    const url = section.subscribe_url;
+    const no_certificate = section.no_certificate;
+    const ua = section.ua;
+
+    log_t('[%s] start...', group);
+
+    const handle = wget(url, no_certificate, ua);
+
+    if (handle) {
+        let content = handle.read('all');
+
+        const decode = b64dec(content);
+
+        if (decode != null) {
+            content = decode;
+        }
+
+        if (content) {
+            const lines = split(content, /[\r\n]/g);
+
+            for (let i = 0; i < length(lines); i++) {
+                const line = trim(lines[i]);
+
+                if (line != '') {
+                    let result = {
+                        group: group
+                    };
+
+                    if (vmess_parse(line, result)) {
+                        // 
+                    } else {
+                        continue;
+                    }
+
+                    log_tab('Get %s', result.alias);
+                    results[result.hashkey] = result;
+                }
+            }
+        }
+
+        log_t('[%s] done.', group);
+        handle.close();
+    }
+    else {
+        log_t('[%s] error.', group);
+    }
+
+    return results;
+}
+
+export function subscribe(section_id) {
     const uci = cursor();
     let results = {};
 
-    uci.foreach(config_name, 'subscription',
-        function (section) {
-            const group = section['.name'];
-            const url = section.subscribe_url;
-            const no_certificate = section.no_certificate;
-            const ua = section.ua;
-
-            log_t('[%s] start...', group);
-
-            const handle = wget(url, no_certificate, ua);
-
-            if (handle) {
-                let content = handle.read('all');
-
-                const decode = b64dec(content);
-
-                if (decode != null) {
-                    content = decode;
-                }
-
-                if (content) {
-                    const lines = split(content, /[\r\n]/g);
-
-                    for (let i = 0; i < length(lines); i++) {
-                        const line = trim(lines[i]);
-
-                        if (line != '') {
-                            let result = {
-                                group: group
-                            };
-
-                            if (vmess_parse(line, result)) {
-
-                            } else {
-                                continue;
-                            }
-
-                            log_tab('Get %s', result.alias);
-                            results[result.hashkey] = result;
-                        }
-                    }
-                }
-
-                log_t('[%s] done.', group);
-                handle.close();
+    if (section_id) {
+        results = subscribe_one(uci.get_all(config_name, section_id));
+    } else {
+        log_t('subscribe starting...');
+        uci.foreach(config_name, 'subscription',
+            function (section) {
+                subscribe_one(section, results);
             }
-            else {
-                log_t('[%s] error.', group);
-            }
-        }
-    );
-
-    log_t('All done.');
+        );
+        log_t('All done.');
+    }
 
     uci.foreach(config_name, 'node', section => {
         const group = section.group;
         if (group != null && group != '') {
+            if (section_id && group != section_id) {
+                return;
+            }
+
             uci.delete(config_name, section['.name']);
         }
     });

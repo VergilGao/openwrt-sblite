@@ -12,7 +12,8 @@ This repository is under development and cannot be used properly.
 
 - [ ] init.d script
 - [ ] sing-box config generate
-- [ ] subscribe cron job
+- [x] subscribe cron job
+- [ ] other cron job
 - [ ] Makefile
 - [ ] DNS config
 - [ ] Rule set
