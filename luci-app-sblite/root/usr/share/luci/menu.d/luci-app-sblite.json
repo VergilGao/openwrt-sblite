@@ -1,0 +1,18 @@
+{
+    "admin/services/sblite": {
+        "title": "sing-box lite",
+        "order": 60,
+        "action": {
+            "type": "view",
+            "path": "sblite/main"
+        },
+        "depends": {
+            "acl": [
+                "luci-app-sblite"
+            ],
+            "uci": {
+                "sblite": true
+            }
+        }
+    }
+}

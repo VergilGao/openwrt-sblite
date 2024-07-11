@@ -1,0 +1,19 @@
+'use strict';
+
+import * as app from '/usr/share/sblite/export.uc';
+
+const methods = {
+    subscribe: {
+        call: function () {
+            return app.subscribe();
+        }
+    },
+
+    clear_log: {
+        call: function () {
+            return app.clear_log();
+        }
+    },
+};
+
+return { 'luci.sblite': methods };

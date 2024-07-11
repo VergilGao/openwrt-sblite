@@ -1,0 +1,25 @@
+{
+    "luci-app-sblite": {
+        "description": "Grant access to sblite configuration",
+        "read": {
+            "file": {
+                "/tmp/log/sblite.log": [
+                    "read"
+                ]
+            },
+            "ubus": {
+                "luci.sblite": [
+                    "*"
+                ]
+            },
+            "uci": [
+                "sblite"
+            ]
+        },
+        "write": {
+            "uci": [
+                "sblite"
+            ]
+        }
+    }
+}

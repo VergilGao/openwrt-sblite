@@ -1,0 +1,39 @@
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"POT-Creation-Date: 2024-06-19 13:42+0800\n"
+"PO-Revision-Date: 2024-06-19 11:44+0800\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4.4\n"
+"X-Poedit-Basepath: ../../root\n"
+"X-Poedit-SearchPath-0: .\n"
+
+#: www/luci-static/resources/view/sblite/main.js:12
+msgid "Main Settings"
+msgstr ""
+
+#: www/luci-static/resources/view/sblite/main.js:53
+msgid "Enable Server"
+msgstr ""
+
+#: www/luci-static/resources/view/sblite/main.js:55
+msgid "Include Interface"
+msgstr ""
+
+#: www/luci-static/resources/view/sblite/main.js:55
+msgid "A list of interfaces for which the transparent proxy takes effect"
+msgstr ""
+
+#: www/luci-static/resources/view/sblite/main.js:61
+msgid "DNS Listen Port"
+msgstr ""
+
+#: www/luci-static/resources/view/sblite/main.js:61
+msgid "The port number on which the DNS service runs"
+msgstr ""

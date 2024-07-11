@@ -1,0 +1,5 @@
+#!/bin/sh
+
+[ "$ACTION" = "ifup" -o "$ACTION" = "ifupdate" ] && [ $(uci get sblite.main.enable) = "1" ] && {
+    # if "$DEVICE" in outbounds restart sblite
+}
