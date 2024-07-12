@@ -191,10 +191,10 @@ function render_rules(parent) {
     o.modalonly = false;
     o.textvalue = section_id => {
         const text = uci.get(config_name, section_id, 'rule_set').join(', ');
-        if(uci.get(config_name, section_id, 'invert') === '1') {
+        if (uci.get(config_name, section_id, 'invert') === '1') {
             return E('div', `<b><i>${_('Not Match')}</i></b> ${text}`);
         }
-        
+
         return text;
     }
 }
@@ -299,9 +299,9 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
             o.rmempty = false;
             o.datatype = 'string';
             o.validate = (section_id, value) => {
-                if(value !== 'any') {
-                  return  validate_tag('outbound', section_id, value);
-                } 
+                if (value !== 'any') {
+                    return validate_tag('outbound', section_id, value);
+                }
 
                 return _('Outbound tag couldn\'t be "any"');
             }
@@ -312,6 +312,7 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
         o.datatype = 'string';
         o.value('direct', _('Direct'));
         o.value('node', _('Node'));
+        o.value('urltest', _('URLTest'));
         o.default = 'direct';
 
         o = s.option(form.ListValue, 'interface', _('Outbound Interface'));
@@ -332,6 +333,23 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
             }
             o.value(value, s.alias);
         });
+
+        o = s.option(form.MultiValue, 'include', _('Include Outbound'), _('List of outbound tags to test.'));
+        o.rmempty = false;
+        o.depends('type', 'urltest');
+        uci.sections(config_name, 'outbound', function (s) {
+            if (s.type !== 'urltest' && s['.name'] !== section_id) {
+                o.value(s.tag);
+            }
+        });
+
+        o = s.option(form.Value, 'url', _('Test Url'), _('The URL to test.'));
+        o.rmempty = false;
+        o.depends('type', 'urltest');
+        o.value('https://www.gstatic.com/generate_204');
+        o.value('https://www.apple.com/library/test/success.html');
+        o.value('https://connectivitycheck.platform.hicloud.com/generate_204');
+        o.value('https://wifi.vivo.com.cn/generate_204');
     };
 
     o = s.option(form.DummyValue, 'outbound_config');
@@ -354,6 +372,9 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
                     });
                 }
                 return uci.get(config_name, node, 'alias');
+
+            case 'urltest':
+                return _('URLTest') + ': ' + uci.get(config_name, section_id, 'include').join(', ')
             default: return 'unkown';
         }
     };
