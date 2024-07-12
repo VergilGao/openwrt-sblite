@@ -1,5 +1,5 @@
 'use strict';
-import { md5 } from '../utils.uc';
+import { md5, log_t } from '../utils.uc';
 
 const vmess = 'vmess';
 
@@ -27,9 +27,16 @@ export function parse(content, result) {
                 result.transport = info['net'];
                 result.alter_id = info['aid'];
                 result.id = info['id'];
-                result.alias = info['ps'];
-                result.hashkey = md5(b64enc(result['group'] + ' ' + result['type'] + '://' + result['address'] + ':' + result['port'] + '|' + result['transport'] + ' ' + result['alter_id'] + ' ' + result['id']));
-
+                result.alias = sprintf('[%s] %s', result.group, info['ps']);
+                result.hashkey = md5(b64enc(sprintf('[%s] %s://%s:%s?transport=%s&&alter_id=%s&&id=%s',
+                    result.group,
+                    result.type,
+                    result.address,
+                    result.port,
+                    result.transport,
+                    result.alter_id,
+                    result.id)));
+                
                 return true;
             }
         }

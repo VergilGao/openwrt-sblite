@@ -6,6 +6,7 @@ touch /etc/config/$config_name
 
 section_type="sing_box"
 uci set $config_name.main=$section_type
+uci set $config_name.route=$section_type
 uci set $config_name.dns=$section_type
 uci set $config_name.subscribe=$section_type
 

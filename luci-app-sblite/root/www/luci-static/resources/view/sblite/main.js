@@ -20,6 +20,17 @@ const callSubscribe = rpc.declare({
 
 const modalStyle = '  height:50%; width:50%;  position:absolute; top:20%; left:25%; background-color:#800080; border-radius: 15px;';
 
+function validate_tag(section_type, section_id, value) {
+    let sections = uci.sections(config_name, section_type);
+    for (let s of sections) {
+        if (s['.name'] != section_id && s.tag === value) {
+            return _('Tag conflicts with other sections');
+        }
+    }
+
+    return true;
+}
+
 return view.extend({
     load: function () {
         return Promise.all(
@@ -97,6 +108,16 @@ return view.extend({
         o.rmempty = false;
         o.default = false;
 
+        render_rules(s.taboption(
+            tabName,
+            form.SectionValue,
+            'route_rule',
+            form.NamedSection,
+            'route',
+            'sing_box',
+            _('Route Settings')
+        ).subsection);
+
         render_dns_tab(s);
         render_outbound_tab(s, wanInterfaces, lanInterfaces);
         render_nodes_tab(s);
@@ -106,6 +127,77 @@ return view.extend({
         return map.render();
     },
 });
+
+function render_rules(parent) {
+    let s, o;
+
+    o = parent.option(form.Flag, 'custom_default', _('Custom Default Outbound'), _('The first outbound will be used if not set.'));
+    o.default = false;
+    o = parent.option(form.ListValue, 'final', _('Default Outbound'), _('Default outbound tag.'));
+    o.depends('custom_default', '1');
+    o.rmempty = true;
+    uci.sections(config_name, 'outbound', function (s, section_id) {
+        o.value(s.tag);
+    });
+
+    s = parent.option(
+        form.SectionValue,
+        'rule',
+        form.GridSection,
+        'route_rule',
+        _('Route Rules'))
+        .subsection;
+    s.addremove = true;
+    s.anonymous = true;
+    s.sortable = true;
+    s.description = E('div', { style: 'color:red' }, _('Please note attention to the priority, the higher the order, the higher the priority.'));
+
+    s.modaltitle = function (section_id) {
+        let name = uci.get(config_name, section_id, 'tag');
+        return _('Outbound Configuration') + ' » ' + (name ?? _('new rule'));
+    };
+
+    s.sectiontitle = section_id => uci.get(config_name, section_id, 'tag');
+
+    s.addModalOptions = function (s, section_id) {
+        if (!uci.get(config_name, section_id, 'tag')) {
+            o = s.option(form.Value, 'tag', _('Rule Tag'));
+            o.rmempty = false;
+            o.datatype = 'string';
+            o.validate = (section_id, value) => validate_tag('route_rule', section_id, value);
+        }
+
+        o = s.option(form.ListValue, 'outbound', _('Outbound'));
+        uci.sections(config_name, 'outbound', function (s, section_id) {
+            o.value(s.tag);
+        });
+
+        o = s.option(form.Flag, 'invert', _('Invert'), _('Invert match result.'));
+        o.rmempty = false;
+
+        o = s.option(form.MultiValue, 'rule_set', _('Rule Sets'));
+        uci.sections(config_name, 'rule_set', function (s, section_id) {
+            if (s.sub !== '1') {
+                o.value(s.tag);
+            }
+        });
+    };
+
+    o = s.option(form.DummyValue, 'outbound');
+    o.modalonly = false;
+    o.textvalue = section_id => uci.get(config_name, section_id, 'outbound');
+
+    o = s.option(form.DummyValue, 'rule_set');
+    o.modalonly = false;
+    o.textvalue = section_id => {
+        const text = uci.get(config_name, section_id, 'rule_set').join(', ');
+        if(uci.get(config_name, section_id, 'invert') === '1') {
+            return E('div', `<b><i>${_('Not Match')}</i></b> ${text}`);
+        }
+        
+        return text;
+    }
+}
 
 function render_dns_tab(parent) {
     const tabName = 'dns';
@@ -143,23 +235,45 @@ function render_dns_tab(parent) {
     o.datatype = 'ip6addr';
     o.default = 'fc00::/18';
 
+    o = s.option(form.Flag, 'custom_default', _('Custom Default DNS'), _('The first dns server will be used if not set.'));
+    o.default = false;
+    o = s.option(form.ListValue, 'final', _('Default DNS'), _('Default dns server tag.'));
+    o.depends('custom_default', '1');
+    o.rmempty = true;
+    uci.sections(config_name, 'dns_server', function (s, section_id) {
+        o.value(s.tag);
+    });
+
     s = parent.taboption(
         tabName,
         form.SectionValue,
-        'servers',
+        'dns_servers',
         form.GridSection,
         'dns_server',
-        '')
+        _('DNS Servers'))
         .subsection;
     s.addremove = true;
     s.anonymous = true;
+    s.sortable = true;
+
+    s = parent.taboption(
+        tabName,
+        form.SectionValue,
+        'dns_rules',
+        form.GridSection,
+        'dns_rule',
+        _('DNS Rules'))
+        .subsection;
+    s.addremove = true;
+    s.anonymous = true;
+    s.sortable = true;
 }
 
 function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
     const tabName = 'outbound';
     let s, o;
 
-    parent.tab(tabName, _('Outbounds Settings'));
+    parent.tab(tabName, _('Outbound Settings'));
 
     s = parent.taboption(
         tabName,
@@ -170,16 +284,28 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
         .subsection;
     s.addremove = true;
     s.anonymous = true;
+    s.sortable = true;
 
     s.modaltitle = function (section_id) {
-        let name = uci.get(config_name, section_id, 'name');
-        return _('Outbound Configuration') + ' » ' + (name ?? _('unamed interface'));
+        let name = uci.get(config_name, section_id, 'tag');
+        return _('Outbound Configuration') + ' » ' + (name ?? _('new outbound'));
     };
 
+    s.sectiontitle = section_id => uci.get(config_name, section_id, 'tag');
+
     s.addModalOptions = function (s, section_id) {
-        o = s.option(form.Value, 'tag', _('Outbound Tag'));
-        o.rmempty = false;
-        o.datatype = 'string';
+        if (!uci.get(config_name, section_id, 'tag')) {
+            o = s.option(form.Value, 'tag', _('Outbound Tag'));
+            o.rmempty = false;
+            o.datatype = 'string';
+            o.validate = (section_id, value) => {
+                if(value !== 'any') {
+                  return  validate_tag('outbound', section_id, value);
+                } 
+
+                return _('Outbound tag couldn\'t be "any"');
+            }
+        }
 
         o = s.option(form.ListValue, 'type', _('Outbound Type'));
         o.rmempty = false;
@@ -204,12 +330,11 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
             if (s.group) {
                 value = s.hashkey;
             }
-            o.value(value, `${s.alias}`);
+            o.value(value, s.alias);
         });
     };
 
-    s.sectiontitle = section_id => uci.get(config_name, section_id, 'tag');
-    o = s.option(form.DummyValue, 'outbound_config', _('Outbound Config'));
+    o = s.option(form.DummyValue, 'outbound_config');
     o.modalonly = false;
     o.textvalue = function (section_id) {
         const type = uci.get(config_name, section_id, 'type');
@@ -232,7 +357,6 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
             default: return 'unkown';
         }
     };
-
 }
 
 function render_nodes_tab(parent) {
@@ -243,10 +367,10 @@ function render_nodes_tab(parent) {
 
     o = parent.taboption(tabName, form.DummyValue, '_nodes_info', '');
     o.cfgvalue = function (section_id) {
-        const outbounds = uci.sections(config_name, 'node');
+        const nodes = uci.sections(config_name, 'node');
 
-        if (outbounds && Array.isArray(outbounds)) {
-            const groups = outbounds.reduce((groups, outbound) => {
+        if (nodes && Array.isArray(nodes)) {
+            const groups = nodes.reduce((groups, outbound) => {
                 const key = outbound.group;
                 if (key) {
                     if (!groups[key]) {
@@ -260,7 +384,7 @@ function render_nodes_tab(parent) {
             }, {});
 
             const count = Object.values(groups).reduce((count, group) => count += group, 0);
-            let text = `${_('Manual Add')}: ${outbounds.length - count}`;
+            let text = `${_('Manual Add')}: ${nodes.length - count}`;
             for (let key in groups) {
                 text += ` ${key}: ${groups[key]}`;
             }
@@ -313,12 +437,10 @@ function render_nodes_tab(parent) {
     o = s.option(form.DummyValue, '_group', _('Subscription Group'));
     o.modalonly = false;
     o.textvalue = function (section_id) {
-        const group_id = uci.get(config_name, section_id, 'group');
+        const group_tag = uci.get(config_name, section_id, 'group');
 
-        if (group_id) {
-            const group_name = uci.get(config_name, group_id, 'remark');
-
-            return group_name;
+        if (group_tag) {
+            return group_tag;
         } else {
             return '';
         }
@@ -394,16 +516,24 @@ function render_subscription_tab(parent) {
         '')
         .subsection;
     s.addremove = true;
+    s.anonymous = true;
+    s.sortable = true;
     s.description = E('div', { style: 'color:red' }, _('Please input the subscription url first, save and submit before manual subscription.'))
 
     s.modaltitle = function (section_id) {
-        return _('subscription Configuration') + ' » ' + section_id;
+        let name = uci.get(config_name, section_id, 'tag');
+        return _('Subscription Configuration') + ' » ' + (name ?? _('new subscription'));
     };
 
+    s.sectiontitle = section_id => uci.get(config_name, section_id, 'tag');
+
     s.addModalOptions = function (s, section_id) {
-        o = s.option(form.Value, 'remark', _('Subscription Name'));
-        o.rmempty = false;
-        o.datatype = 'string';
+        if (!uci.get(config_name, section_id, 'tag')) {
+            o = s.option(form.Value, 'tag', _('Subscription Name'));
+            o.rmempty = false;
+            o.datatype = 'string';
+            o.validate = (section_id, value) => validate_tag('subscription', section_id, value);
+        }
 
         o = s.option(form.Value, 'subscribe_url', _('Subscription Url'));
         o.rmempty = false;
@@ -441,15 +571,13 @@ function render_subscription_tab(parent) {
         o.value('sblite/OpenWrt');
     };
 
-    s.sectiontitle = section_id => uci.get(config_name, section_id, 'remark');
-
     o = s.option(form.DummyValue, '_subscribe_count', _('Count'));
     o.modalonly = false;
     o.textvalue = function (section_id) {
-        const outbounds = uci.sections(config_name, 'node');
-
-        if (outbounds && Array.isArray(outbounds)) {
-            return outbounds.filter(section => section.group === section_id).length;
+        const nodes = uci.sections(config_name, 'node');
+        const tag = uci.get(config_name, section_id, 'tag');
+        if (nodes && Array.isArray(nodes)) {
+            return nodes.filter(section => section.group === tag).length;
         } else {
             return 0;
         }
@@ -566,12 +694,24 @@ function render_rule_set_tab(parent) {
 
     s = parent.taboption(tabName, form.SectionValue, 'rule_set', form.GridSection, 'rule_set').subsection;
     s.addremove = true;
+    s.anonymous = true;
     s.sortable = true;
-    //s.description = E('div', { style: 'color:red' }, _('Please note attention to the priority, the higher the order, the higher the priority.'));
 
-    s.modaltitle = section_id => `${_('Rule Set Configuration')} » ${section_id}`;
+    s.modaltitle = function (section_id) {
+        let name = uci.get(config_name, section_id, 'tag');
+        return _('Rule Set Configuration') + ' » ' + (name ?? _('new ruleset'));
+    };
+
+    s.sectiontitle = section_id => uci.get(config_name, section_id, 'tag');
 
     s.addModalOptions = function (s, section_id) {
+        if (!uci.get(config_name, section_id, 'tag')) {
+            o = s.option(form.Value, 'tag', _('Rule Set Tag'));
+            o.rmempty = false;
+            o.datatype = 'string';
+            o.validate = (section_id, value) => validate_tag('rule_set', section_id, value);
+        }
+
         o = s.option(form.ListValue, 'type', _('Rule Set Type'));
         Object.keys(rule_set_type_selections).forEach(key => o.value(key, rule_set_type_selections[key]));
 
@@ -583,7 +723,7 @@ function render_rule_set_tab(parent) {
         o = s.option(form.Value, 'path', _('File Path'));
         o.depends('type', 'local');
 
-        o = s.option(form.Value, 'url', _('Download URL'));
+        o = s.option(form.Value, 'url', _('Download URL'), _('Download URL of rule-set. Will auto update everyday'));
         o.depends('type', 'remote');
 
         o = s.option(form.Flag, 'default_detour', _('Default Outbound'), _('Use default outbound to download rule-set.'));
@@ -608,7 +748,7 @@ function render_rule_set_tab(parent) {
 
         uci.sections(config_name, 'rule_set').forEach(element => {
             if (element.sub === '1' && element['.name'] !== section_id)
-                sub_rules.push(element['.name']);
+                sub_rules.push(element.tag);
         });
 
         if (sub_rules.length > 1) {
@@ -620,7 +760,7 @@ function render_rule_set_tab(parent) {
             o.depends('logical_mode', '1');
             o.depends('logical_mode', '2');
             o.modalonly = true;
-            sub_rules.forEach(element => o.value(element));
+            sub_rules.forEach(element => o.value(element.tag));
         } else {
             uci.set(config_name, section_id, 'logical_mode', 0);
         }

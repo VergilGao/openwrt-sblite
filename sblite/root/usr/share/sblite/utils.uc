@@ -21,11 +21,17 @@ export function wget(url, ua, no_certificate) {
 
 // return the md5 value of str
 export function md5(str) {
-    const handle = popen('echo -n "' + str + '" | md5sum');
-    if (handle) {
-        let content = handle.read(' ');
-        handle.close();
-        return trim(content);
+    for (let i = 0; i < 3; i++) {
+        const handle = popen('echo -n "' + str + '" | md5sum');
+        if (handle) {
+            let content = handle.read(' ');
+            handle.close();
+            content = trim(content);
+
+            if(content != null) {
+                return content;
+            }
+        }
     }
 };
 

@@ -16,7 +16,7 @@ This repository is under development and cannot be used properly.
 - [ ] other cron job
 - [ ] Makefile
 - [ ] DNS config
-- [ ] Rule set
+- [x] Rule set
 
 ## Tanks
 

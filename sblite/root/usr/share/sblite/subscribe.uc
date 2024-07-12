@@ -10,7 +10,7 @@ function subscribe_one(section, results) {
         results = {};
     }
 
-    const group = section['.name'];
+    const group = section.tag;
     const url = section.subscribe_url;
     const no_certificate = section.no_certificate;
     const ua = section.ua;
@@ -45,7 +45,10 @@ function subscribe_one(section, results) {
                         continue;
                     }
 
-                    log_tab('Get %s', result.alias);
+                    if (result.hashkey == null) {
+                        log_tab('Hashkey is null: %J',result);
+                    }
+                    log_tab('Get %s Hash: %s', result.alias, result.hashkey);
                     results[result.hashkey] = result;
                 }
             }
@@ -66,7 +69,9 @@ export function subscribe(section_id) {
     let results = {};
 
     if (section_id) {
-        results = subscribe_one(uci.get_all(config_name, section_id));
+        const section = uci.get_all(config_name, section_id);
+        section_id = section.tag;
+        results = subscribe_one(section);
     } else {
         log_t('subscribe starting...');
         uci.foreach(config_name, 'subscription',
