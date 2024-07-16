@@ -142,7 +142,7 @@ function render_rules(parent) {
 
     s = parent.option(
         form.SectionValue,
-        'rule',
+        'route_rule',
         form.GridSection,
         'route_rule',
         _('Route Rules'))
@@ -175,6 +175,17 @@ function render_rules(parent) {
         o = s.option(form.Flag, 'invert', _('Invert'), _('Invert match result.'));
         o.rmempty = false;
 
+        const protocol_selections = {
+            'HTTP': _('QUIC'),
+            'TLS': _('TLS'),
+            'QUIC': _('QUIC'),
+            'STUN': _('STUN'),
+            'BitTorrent': _('BitTorrent'),
+        };
+
+        o = s.option(form.MultiValue, 'protocol', _('Protocol'));
+        Object.keys(protocol_selections).forEach(key => o.value(key, protocol_selections[key]));
+
         o = s.option(form.MultiValue, 'rule_set', _('Rule Sets'));
         uci.sections(config_name, 'rule_set', function (s, section_id) {
             if (s.sub !== '1') {
@@ -187,15 +198,31 @@ function render_rules(parent) {
     o.modalonly = false;
     o.textvalue = section_id => uci.get(config_name, section_id, 'outbound');
 
+    o = s.option(form.DummyValue, 'protocol');
+    o.modalonly = false;
+    o.textvalue = section_id => {
+        const protocols = uci.get(config_name, section_id, 'protocol');
+        if (protocols) {
+            return `<b>${_('Protocol')}: </b>` + protocols.join(', ');
+        } else {
+            return '';
+        }
+    }
+
     o = s.option(form.DummyValue, 'rule_set');
     o.modalonly = false;
     o.textvalue = section_id => {
-        const text = uci.get(config_name, section_id, 'rule_set').join(', ');
-        if (uci.get(config_name, section_id, 'invert') === '1') {
-            return E('div', `<b><i>${_('Not Match')}</i></b> ${text}`);
-        }
+        const rule_sets = uci.get(config_name, section_id, 'rule_set');
+        if (rule_sets) {
+            const text = `<b>${_('Rule Set')}: </b>` + rule_sets.join(', ');
+            if (uci.get(config_name, section_id, 'invert') === '1') {
+                return E('div', `<b><i>${_('Not Match')}</i></b> ${text}`);
+            }
 
-        return text;
+            return text;
+        } else {
+            return '';
+        }
     }
 }
 
@@ -332,6 +359,15 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
                 value = s.hashkey;
             }
             o.value(value, s.alias);
+        });
+
+        o = s.option(form.ListValue, 'outbound', _('Outbound Tag'));
+        o.rmempty = false;
+        o.depends('type', 'node');
+        uci.sections(config_name, 'outbound', function (s, section_id) {
+            if (s.type == 'direct') {
+                o.value(s.tag);
+            }
         });
 
         o = s.option(form.MultiValue, 'include', _('Include Outbound'), _('List of outbound tags to test.'));
@@ -643,7 +679,7 @@ function render_subscription_tab(parent) {
                     const res = await callSubscribe(section_id);
                     uci.unload(config_name);
                     await uci.load(config_name);
-                    const arr = Object.keys(res).map(key => `${res[key].alias} [${res[key].address}:${res[key].port}]`);
+                    const arr = Object.keys(res).map(key => `${res[key].alias}`);
                     if (arr.length > 0) {
                         alert(_('订阅到的节点列表') + '\n' + arr.join('\n'));
                     }
@@ -654,8 +690,6 @@ function render_subscription_tab(parent) {
                 catch (err) {
                     alert(_('更新订阅出现异常' + '\n' + err));
                 }
-
-                //await map.load();
 
                 return parent.map.save(null, true);
             }),
@@ -680,14 +714,6 @@ function render_rule_set_tab(parent) {
         '0': _('TCP and UDP'),
         '1': _('TCP'),
         '2': _('UDP'),
-    };
-
-    const protocol_selections = {
-        'HTTP': _('QUIC'),
-        'TLS': _('TLS'),
-        'QUIC': _('QUIC'),
-        'STUN': _('STUN'),
-        'BitTorrent': _('BitTorrent'),
     };
 
     const rule_set_type_selections = {
@@ -790,11 +816,6 @@ function render_rule_set_tab(parent) {
         o.depends({ logical_mode: '0', type: 'inline' });
         o.depends({ logical_mode: undefined, type: 'inline' });
         Object.keys(network_selections).forEach(key => o.value(key, network_selections[key]));
-
-        o = s.option(form.MultiValue, 'protocol', _('Protocol'));
-        o.depends({ logical_mode: '0', type: 'inline' });
-        o.depends({ logical_mode: undefined, type: 'inline' });
-        Object.keys(protocol_selections).forEach(key => o.value(key, protocol_selections[key]));
 
         o = s.option(form.DynamicList, 'source', _('Source IP'), `${_('Example')}:<br />- ${_('IP')}: 192.168.1.100<br />- ${_('IP CIDR')}: 192.168.1.0/24`);
         o.depends({ logical_mode: '0', type: 'inline' });

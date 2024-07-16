@@ -1,9 +1,10 @@
 'use strict';
+
 import { md5, log_t } from '../utils.uc';
 
-const vmess = 'vmess';
+// see: https://github.com/jarryson/singbox-subscribe/blob/main/parsers/vmess.py
 
-export const TYPE = vmess;
+export const TYPE = 'vmess';
 
 export function parse(content, result) {
     const matches = match(content, /vmess:\/\/(.*)/);
@@ -21,21 +22,23 @@ export function parse(content, result) {
             const info = json(payload);
 
             if (info) {
-                result.type = vmess;
-                result.address = info['add'];
-                result.port = info['port'];
-                result.transport = info['net'];
-                result.alter_id = info['aid'];
-                result.id = info['id'];
+                result.type = TYPE;
+                result.server = info['add'];
+                result.server_port = int(info['port']);
+                result.uuid = info['id'];
+                result.alter_id = info['aid'] ?? '0';
+                result.security = info['scy'] ?? 'auto';
+                if(result.security != 'http') {
+                    result.security = 'auto';
+                }
+
                 result.alias = sprintf('[%s] %s', result.group, info['ps']);
-                result.hashkey = md5(b64enc(sprintf('[%s] %s://%s:%s?transport=%s&&alter_id=%s&&id=%s',
+                result.hashkey = md5(b64enc(sprintf('[%s] %s://%s:%s?id=%s',
                     result.group,
                     result.type,
-                    result.address,
-                    result.port,
-                    result.transport,
-                    result.alter_id,
-                    result.id)));
+                    result.server,
+                    result.server_port,
+                    result.uuid)));
                 
                 return true;
             }
@@ -43,4 +46,17 @@ export function parse(content, result) {
     }
 
     return false;
+};
+
+export function outbound(section) {
+    return {
+        type: 'vmess',
+        tag: section.tag,
+        server: section.server,
+        server_port: int(section.server_port),
+        uuid: section.uuid,
+        security: section.security,
+        alter_id: int(section.alter_id),
+        packet_encoding: 'xudp',
+    };
 };

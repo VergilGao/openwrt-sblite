@@ -28,7 +28,7 @@ export function md5(str) {
             handle.close();
             content = trim(content);
 
-            if(content != null) {
+            if (content != null) {
                 return content;
             }
         }
@@ -52,6 +52,62 @@ export function get_loopback(ipv6) {
     }
 
     return loopback;
+};
+
+/**
+ * 将字符串转化为 ip
+ * @returns {Object} ip
+ * @returns {number} ip.version
+ * @returns {string} ip.address
+ * @returns {number} ip.cidr
+ */
+export function asip(str) {
+    const result = match(str, /^([0-9a-fA-F:.]+)(\/([0-9]+))?$/);
+    if (result) {
+        const ip = iptoarr(result[1]);
+
+        if (ip) {
+            let cidr = (result[3] == null ? null : int(result[3]));
+
+            if (length(ip) == 4) {
+                cidr ??= 32;
+
+                if (cidr <= 32) {
+                    return { version: 4, address: arrtoip(ip), cidr: cidr };
+                }
+            } else if (length(ip) == 16) {
+                cidr ??= 128;
+
+                if (cidr <= 128) {
+                    return { version: 6, address: arrtoip(ip), cidr: cidr };
+                }
+            }
+        }
+    }
+
+    return null;
+};
+
+export function asport(str) {
+    const result = match(str, /^([0-9]+)(-([0-9]+))?$/);
+    if (result) {
+        const port0 = int(result[1]);
+
+        if (port0 >= 0 && port0 <= 65535) {
+            const port1 = result[3] == null ? null : int(result[3]);
+
+            if (port1) {
+                if (port1 > port0 && port1 <= 65535) {
+                    return { range: true, start: port0, end: port1 };
+                }
+
+            } else {
+                return { range: false, value: port0 };
+            }
+        }
+    }
+
+    return null;
 };
 
 function log(fmt, ...args) {
