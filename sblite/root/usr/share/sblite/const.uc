@@ -1,6 +1,6 @@
 'use strict';
 
-export const APP_FILE = '/usr/share/sblite/app.uc';
+export const APP_FILE = '/usr/share/sblite/app.sh';
 export const PKG_NAME = 'sing-box lite';
 export const CONF_NAME = 'sblite';
 

@@ -25,8 +25,8 @@ function start() {
 
     uci.commit();
 
-    //const enable = uci.get(CONF_NAME, 'main', 'enable') == '1';
-    const enable = true;
+    const enable = uci.get(CONF_NAME, 'main', 'enable') == '1';
+    //const enable = true;
 
     if (enable) {
         start_crontab();

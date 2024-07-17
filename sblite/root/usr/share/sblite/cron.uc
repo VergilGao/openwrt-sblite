@@ -5,7 +5,7 @@ import { APP_FILE, CONF_NAME } from './const.uc';
 
 function clean() {
     system('touch /etc/crontabs/root');
-    system('sed -i "/ucode -D action=subscribe -D params=.*sblite/d" /etc/crontabs/root');
+    system(`sed -i "/sh ${APP_FILE} subscribe cfg.* > /dev/null 2>&1 &/d" /etc/crontabs/root`);
 }
 
 export function start() {
@@ -22,7 +22,7 @@ export function start() {
                     week = '*';
                 }
 
-                const command = sprintf('echo "0 %s * * %s ucode -D action=subscribe -D params=%s %s > /dev/null 2>&1 &" >> /etc/crontabs/root', day, week, section['.name'], APP_FILE);
+                const command =`echo "0 ${day} * * ${week} sh ${APP_FILE} subscribe ${section['.name']} > /dev/null 2>&1 &" >> /etc/crontabs/root`;
                 system(command);
             }
         }
