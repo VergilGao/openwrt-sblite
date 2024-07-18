@@ -1,12 +1,7 @@
 'use strict';
 
-import { log_tab, asip, asport } from './utils.uc';
-
-function delete_empty_arr(obj, arr_name) {
-    if (length(obj[arr_name]) == 0) {
-        delete obj[arr_name];
-    }
-}
+import { log_tab, asip, asport, delete_empty_arr } from './utils.uc';
+import { CONF_NAME } from './const.uc';
 
 function config_ip_and_port(section, section_ip, section_port, config, config_ip, config_port, config_port_range) {
     if (section[section_ip]) {
@@ -49,12 +44,8 @@ function config_ip_and_port(section, section_ip, section_port, config, config_ip
     }
 }
 
-export function Headless(section) {
-    const result = {};
-
-    if (section.invert == '1') {
-        result.invert = true;
-    }
+function rule(section) {
+    const result = { invert: section.invert == '1' };
 
     switch (section.network) {
         case null:
@@ -64,23 +55,6 @@ export function Headless(section) {
         default:
             log_tab('Unkown rule_set network (%s) setting in %s', section.network, section.tag);
             result.network = ['tcp', 'udp']; break;
-    }
-
-    if (section.protocol) {
-        const protocols = [];
-
-        for (let i = 0; i < length(section.protocol); i++) {
-            const protocol = section.protocol[i];
-            if (index(['HTTP', 'TLS', 'QUIC', 'STUN', 'BitTorrent'], protocol) > 0) {
-                push(protocols, protocol);
-            } else {
-                log_tab('Unkown rule_set protocol (%s) setting in %s', protocol, section.tag);
-            }
-        }
-
-        if (length(protocols) > 0) {
-            result.protocol = protocols;
-        }
     }
 
     config_ip_and_port(section, 'source', 'source_port', result, 'source_ip_cidr', 'source_port', 'source_port_range');
@@ -119,34 +93,154 @@ export function Headless(section) {
     }
 
     return result;
-};
+}
 
-export function Logical(value) {
-    let mode;
+function headless(section, sub_rules) {
+    if (section.logical_mode && section.logical_mode != '0') {
+        const headless = {
+            type: 'logical',
+            invert: section.invert == '1',
+            rules: []
+        };
+        if (section.logical_mode == '1') {
+            headless.mode = 'and';
+        } else if (section.logical_mode == '2') {
+            headless.mode = 'or';
+        } else {
+            log_tab('[Rule Set %s] Unkown rule set logical_mode %s', section.tag, section.logical_mode);
+            return;
+        }
 
-    switch (value) {
-        case '1': mode = 'and'; break;
-        case '2': mode = 'or'; break;
-        default:
-            die(`unkown rule logical mode ${mode}`);
+        if (section.sub_rule) {
+            for (let sub_rule_tag in section.sub_rule) {
+                const sub_rule = sub_rules[sub_rule_tag];
+                if (sub_rule) {
+                    push(headless.rules, sub_rule);
+                } else {
+                    log_tab('[Rule Set %s] Unkown sub rule set tag %s', section.tag, sub_rule_tag);
+                }
+            }
+
+            if (length(headless.rules) > 0) {
+                return headless;
+            }
+        }
+    } else {
+        const headless = rule(section);
+        return headless;
     }
+}
 
-    return proto({
-        type: 'logical',
-        mode: mode,
-        rules: [],
-        invert: false,
-    }, {
-        addSubRule: function (rule) {
-            push(this.rules, rule);
-        },
+function rule_set(section, headless_rules, sub_rules, outbounds) {
+    switch (section.type) {
+        case 'headless':
+            return;
+        case 'inline':
+            const inline = {
+                type: section.type,
+                tag: section.tag,
+                rules: [],
+            };
 
-        is_empty: function () {
-            return !(length(this.rules) > 0);
+            if (section.advance != '1') {
+                const rule = headless(section, sub_rules);
+                push(inline.rules, rule);
+            } else {
+                for (let tag in section.headless) {
+                    const rule = headless_rules[tag];
+                    if (rule) {
+                        push(inline.rules, rule);
+                    } else {
+                        log_tab('[Rule Set %s] Unkown headless rule set tag %s', section.tag, tag);
+                    }
+                }
+            }
+
+            if (length(inline.rules) > 0) {
+                return inline;
+            }
+            return;
+        case 'local':
+            const local = {
+                type: section.type,
+                tag: section.tag,
+            };
+            if (section.format == 'binary' || section.format == 'source') {
+                local.format = section.format;
+            } else {
+                log_tab('[Rule Set %s] Unkown rule set format %s', section.tag, section.format);
+                return;
+            }
+
+            if (section.path) {
+                local.path = section.path;
+            } else {
+                log_tab('[Rule Set %s] Local rule set path undefined', section.tag);
+                return;
+            }
+
+            return local;
+        case 'remote':
+            const remote = {
+                type: section.type,
+                tag: section.tag,
+            };
+
+            if (section.format == 'binary' || section.format == 'source') {
+                remote.format = section.format;
+            } else {
+                log_tab('[Rule Set %s] Unkown rule set format %s', section.tag, section.format);
+                return;
+            }
+
+            if (section.url) {
+                remote.url = section.url;
+            } else {
+                log_tab('[Rule Set %s] Remote rule set url undefined', section.tag);
+                return;
+            }
+
+            if (section.default_detour == '0' && section.download_detour) {
+                if (outbounds[section.download_detour]) {
+                    remote.download_detour = section.download_detour;
+                } else {
+                    log_tab('[Rule Set %s] There is no outbound(%s)', section.tag, section.download_detour);
+                    return;
+                }
+            }
+
+            return remote;
+        default:
+            log_tab('[Rule Set %s] Unkown rule set type %s', section.tag, section.type);
+            return;
+    }
+}
+
+export function RuleSet(uci, outbounds) {
+    const sub_rules = {}, headless_rules = {}, rule_sets = {};
+
+    uci.foreach(CONF_NAME, 'rule_set', section => {
+        if (section.type == 'headless' && section.sub == '1') {
+            sub_rules[section.tag] = rule(section);
         }
     });
-};
 
-export function RuleSet() {
+    uci.foreach(CONF_NAME, 'rule_set', section => {
+        if (section.type == 'headless' && section.sub != '1') {
+            headless_rules[section.tag] = headless(section, sub_rules);
+        }
+    });
 
+    uci.foreach(CONF_NAME, 'rule_set', section => {
+        if (section.type == 'headless') {
+            return;
+        }
+
+        const ruleSet = rule_set(section, headless_rules, sub_rules, outbounds);
+        if (ruleSet) {
+            rule_sets[section.tag] = ruleSet;
+        }
+    });
+
+    return rule_sets;
 };

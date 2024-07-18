@@ -54,6 +54,12 @@ export function get_loopback(ipv6) {
     return loopback;
 };
 
+export function delete_empty_arr(obj, arr_name) {
+    if (length(obj[arr_name]) == 0) {
+        delete obj[arr_name];
+    }
+};
+
 /**
  * 将字符串转化为 ip
  * @returns {Object} ip

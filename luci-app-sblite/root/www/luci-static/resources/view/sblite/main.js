@@ -20,7 +20,7 @@ const callSubscribe = rpc.declare({
 
 const modalStyle = '  height:50%; width:50%;  position:absolute; top:20%; left:25%; background-color:#800080; border-radius: 15px;';
 
-function validate_tag(section_type, section_id, value) {
+function unique_tag(section_type, section_id, value) {
     let sections = uci.sections(config_name, section_type);
     for (let s of sections) {
         if (s['.name'] != section_id && s.tag === value) {
@@ -164,7 +164,7 @@ function render_rules(parent) {
             o = s.option(form.Value, 'tag', _('Rule Tag'));
             o.rmempty = false;
             o.datatype = 'string';
-            o.validate = (section_id, value) => validate_tag('route_rule', section_id, value);
+            o.validate = (section_id, value) => unique_tag('route_rule', section_id, value);
         }
 
         o = s.option(form.ListValue, 'outbound', _('Outbound'));
@@ -188,7 +188,7 @@ function render_rules(parent) {
 
         o = s.option(form.MultiValue, 'rule_set', _('Rule Sets'));
         uci.sections(config_name, 'rule_set', function (s, section_id) {
-            if (s.sub !== '1') {
+            if (s.sub !== '1' && s.type !== 'headless') {
                 o.value(s.tag);
             }
         });
@@ -327,7 +327,7 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
             o.datatype = 'string';
             o.validate = (section_id, value) => {
                 if (value !== 'any') {
-                    return validate_tag('outbound', section_id, value);
+                    return unique_tag('outbound', section_id, value);
                 }
 
                 return _('Outbound tag couldn\'t be "any"');
@@ -530,7 +530,7 @@ function render_subscription_tab(parent) {
         o.value(4, _('Keep List, But Discard List First'));
 
         if (global) {
-            o.value(5, _('Global'));
+            o.value(5, _('Global Filter'));
         }
 
         o = s.option(form.DynamicList, 'blacklist', _('Discard List'));
@@ -589,7 +589,7 @@ function render_subscription_tab(parent) {
             o = s.option(form.Value, 'tag', _('Subscription Name'));
             o.rmempty = false;
             o.datatype = 'string';
-            o.validate = (section_id, value) => validate_tag('subscription', section_id, value);
+            o.validate = (section_id, value) => unique_tag('subscription', section_id, value);
         }
 
         o = s.option(form.Value, 'subscribe_url', _('Subscription Url'));
@@ -718,6 +718,7 @@ function render_rule_set_tab(parent) {
 
     const rule_set_type_selections = {
         'inline': _('Inline'),
+        'headless': _('Headless Rule'),
         'local': _('Local File'),
         'remote': _('Remote File'),
     };
@@ -756,11 +757,32 @@ function render_rule_set_tab(parent) {
             o = s.option(form.Value, 'tag', _('Rule Set Tag'));
             o.rmempty = false;
             o.datatype = 'string';
-            o.validate = (section_id, value) => validate_tag('rule_set', section_id, value);
+            o.validate = (section_id, value) => unique_tag('rule_set', section_id, value);
         }
 
         o = s.option(form.ListValue, 'type', _('Rule Set Type'));
         Object.keys(rule_set_type_selections).forEach(key => o.value(key, rule_set_type_selections[key]));
+
+        const headless_rule_tags = [];
+
+        uci.sections(config_name, 'rule_set').forEach(element => {
+            if (element.type === 'headless' && element.sub !== '1' && element['.name'] !== section_id)
+                headless_rule_tags.push(element.tag);
+        });
+
+        if (headless_rule_tags.length > 0) {
+            o = s.option(form.Flag, 'advance', _('Advance Mode'));
+            o.rmempty = false;
+            o.depends('type', 'inline');
+            o.modalonly = true;
+
+            o = s.option(form.MultiValue, 'headless', _('Headless rules'));
+            o.depends({ type: 'inline', advance: '1' });
+            o.modalonly = true;
+            headless_rule_tags.forEach(tag => o.value(tag));
+        } else {
+            uci.set(config_name, section_id, 'advance', null);
+        }
 
         o = s.option(form.ListValue, 'format', _('Rule Set Format'));
         o.depends('type', 'local');
@@ -773,71 +795,78 @@ function render_rule_set_tab(parent) {
         o = s.option(form.Value, 'url', _('Download URL'), _('Download URL of rule-set. Will auto update everyday'));
         o.depends('type', 'remote');
 
-        o = s.option(form.Flag, 'default_detour', _('Default Outbound'), _('Use default outbound to download rule-set.'));
+        o = s.option(form.Flag, 'default_detour', _('Default Download Outbound'), _('Use default outbound to download rule-set.'));
         o.depends('type', 'remote');
         o.default = true;
 
-        o = s.option(form.ListValue, 'download_detour', _('Outbound'), _('Tag of the outbound to download rule-set.'));
+        o = s.option(form.ListValue, 'download_detour', _('Download Outbound'), _('Tag of the outbound to download rule-set.'));
         o.depends('default_detour', '0');
         uci.sections(config_name, 'outbound', function (s, section_id) {
             o.value(s.tag);
         });
 
         o = s.option(form.Flag, 'sub', _('Sub Rule Set'), _('Is this part of another rule set.'));
-        o.depends('type', 'inline');
+        o.depends('type', 'headless');
         o.rmempty = false;
 
         o = s.option(form.Flag, 'invert', _('Invert'), _('Invert match result.'));
-        o.depends('type', 'inline');
+        o.depends('type', 'headless');
+        o.depends({ type: 'inline', advance: '0' });
+        o.depends({ type: 'inline', advance: undefined });
         o.rmempty = false;
 
-        let sub_rules = [];
+        const sub_rule_tags = [];
 
         uci.sections(config_name, 'rule_set').forEach(element => {
-            if (element.sub === '1' && element['.name'] !== section_id)
-                sub_rules.push(element.tag);
+            if (element.type === 'headless' && element.sub === '1' && element['.name'] !== section_id)
+                sub_rule_tags.push(element.tag);
         });
 
-        if (sub_rules.length > 1) {
+        if (sub_rule_tags.length > 1) {
             o = s.option(form.ListValue, 'logical_mode', _('Logical Mode'));
-            o.depends({ sub: '0', type: 'inline' });
+            o.depends({ sub: '0', type: 'headless' });
+            o.depends({ type: 'inline', advance: '0' });
+            o.depends({ type: 'inline', advance: undefined });
             Object.keys(logical_mode_selections).forEach(key => o.value(key, logical_mode_selections[key]));
 
             o = s.option(form.MultiValue, 'sub_rule', _('Sub rules'));
             o.depends('logical_mode', '1');
             o.depends('logical_mode', '2');
             o.modalonly = true;
-            sub_rules.forEach(element => o.value(element.tag));
+            sub_rule_tags.forEach(tag => o.value(tag));
         } else {
             uci.set(config_name, section_id, 'logical_mode', 0);
         }
 
+        function headless_config_depends(o) {
+            o.depends({ logical_mode: '0', type: 'headless' });
+            o.depends({ logical_mode: undefined, type: 'headless' });
+            o.depends({ logical_mode: '0', type: 'inline', advance: '0' });
+            o.depends({ logical_mode: undefined, type: 'inline', advance: '0' });
+            o.depends({ logical_mode: '0', type: 'inline', advance: undefined });
+            o.depends({ logical_mode: undefined, type: 'inline', advance: undefined });
+        }
+
         o = s.option(form.ListValue, 'network', _('Network'));
-        o.depends({ logical_mode: '0', type: 'inline' });
-        o.depends({ logical_mode: undefined, type: 'inline' });
+        headless_config_depends(o);
         Object.keys(network_selections).forEach(key => o.value(key, network_selections[key]));
 
         o = s.option(form.DynamicList, 'source', _('Source IP'), `${_('Example')}:<br />- ${_('IP')}: 192.168.1.100<br />- ${_('IP CIDR')}: 192.168.1.0/24`);
-        o.depends({ logical_mode: '0', type: 'inline' });
-        o.depends({ logical_mode: undefined, type: 'inline' });
+        headless_config_depends(o)
         o.datatype = 'ipaddr';
         o = s.option(form.DynamicList, 'source_port', _('Source Port'), `${_('Example')}:<br />- ${_('Port')}: 80<br />- ${_('Range')}: 1000-2000`);
-        o.depends({ logical_mode: '0', type: 'inline' });
-        o.depends({ logical_mode: undefined, type: 'inline' });
+        headless_config_depends(o)
         o.datatype = 'portrange';
 
         o = s.option(form.DynamicList, 'dest', _('Dest IP'), `${_('Example')}:<br />- ${_('IP')}: 192.168.1.100<br />- ${_('IP CIDR')}: 192.168.1.0/24`);
-        o.depends({ logical_mode: '0', type: 'inline' });
-        o.depends({ logical_mode: undefined, type: 'inline' });
+        headless_config_depends(o)
         o.datatype = 'ipaddr';
         o = s.option(form.DynamicList, 'dest_port', _('Dest Port'), `${_('Example')}:<br />- ${_('Port')}: 80<br />- ${_('Range')}: 1000-2000`);
-        o.depends({ logical_mode: '0', type: 'inline' });
-        o.depends({ logical_mode: undefined, type: 'inline' });
+        headless_config_depends(o)
         o.datatype = 'portrange';
 
         o = s.option(form.TextValue, 'domain', _('Domain List'));
-        o.depends({ logical_mode: '0', type: 'inline' });
-        o.depends({ logical_mode: undefined, type: 'inline' });
+        headless_config_depends(o)
         o.description = `${_('Each line is parsed as a rule')}:<br />
             - ${_('Start with #')}: ${_('Comments')}<br />
             - ${_('Start with domain')}: ${_('Match full domain')}<br />
@@ -884,7 +913,7 @@ function render_rule_set_tab(parent) {
             `${rule_set_type_selections[type]}`,
         );
 
-        if (type !== 'inline') {
+        if (type !== 'inline' && type !== 'headless') {
             description.push(
                 E('br'),
                 E('b', `${_('Rule Set Format')}: `),
@@ -904,12 +933,14 @@ function render_rule_set_tab(parent) {
                 E('b', `${_('Download Url')}: `),
                 uci.get(config_name, section_id, 'url'),
             );
-        } else if (type === 'inline') {
-            description.push(
-                E('br'),
-                E('b', `${_('Sub Rule Set')}: `),
-                `${uci.get(config_name, section_id, 'sub') === '1' ? _('Yes') : _('No')}`,
-            );
+        } else if (type === 'headless' || (type === 'inline' && uci.get(config_name, section_id, 'advance') !== '1')) {
+            if (type === 'headless') {
+                description.push(
+                    E('br'),
+                    E('b', `${_('Sub Rule Set')}: `),
+                    `${uci.get(config_name, section_id, 'sub') === '1' ? _('Yes') : _('No')}`,
+                );
+            }
 
             const logical_mode = uci.get(config_name, section_id, 'logical_mode');
 
@@ -948,6 +979,12 @@ function render_rule_set_tab(parent) {
                 E('br'),
                 E('b', `${_('Invert')}: `),
                 `${uci.get(config_name, section_id, 'invert') === '1' ? _('Yes') : _('No')}`,
+            );
+        } else if (type === 'inline') {
+            description.push(
+                E('br'),
+                E('b', `${_('Headless rules')}: `),
+                uci.get(config_name, section_id, 'headless').join(', '),
             );
         }
 
