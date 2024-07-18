@@ -1,7 +1,8 @@
 'use strict';
 
-import { log_tab, asip, asport, delete_empty_arr } from './utils.uc';
+import { log_tab, asip, asport, delete_empty_arr, call_system_command } from './utils.uc';
 import { CONF_NAME } from './const.uc';
+import { open as fopen } from 'fs';
 
 function config_ip_and_port(section, section_ip, section_port, config, config_ip, config_port, config_port_range) {
     if (section[section_ip]) {
@@ -31,7 +32,7 @@ function config_ip_and_port(section, section_ip, section_port, config, config_ip
                 if (port.range) {
                     push(config[config_port_range], `${port.start}:${port.end}`);
                 } else {
-                    push(config[config_port], `${port.value}`);
+                    push(config[config_port], port.value);
                 }
 
             } else {
@@ -157,7 +158,38 @@ function rule_set(section, headless_rules, sub_rules, outbounds) {
             }
 
             if (length(inline.rules) > 0) {
-                return inline;
+                const raw = `/tmp/sblite/rule_sets/${section['.name']}.json`;
+                const srs = `/tmp/sblite/rule_sets/${section['.name']}.srs`;
+
+                const fp = fopen(raw, 'w');
+
+                if (fp) {
+                    fp.write({
+                        version: 1,
+                        rules: inline.rules,
+                    });
+                    fp.write('\n');
+                    fp.close();
+                } else {
+                    log_tab('[Rule Set %s] write headless rule to %s failed', section.tag, raw);
+                    return;
+                }
+                
+                const compile = call_system_command(`sing-box rule-set compile --output ${srs} ${raw}`);
+
+                if(compile && compile != '') {
+                    log_tab('[Rule Set %s] compile headless rule failed\n    %s', section.tag, compile);
+                    return;
+                }
+
+                //return inline;
+
+                return {
+                    type: 'local',
+                    tag: section.tag,
+                    format: 'binary',
+                    path: srs,
+                };
             }
             return;
         case 'local':

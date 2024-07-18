@@ -10,12 +10,7 @@ export function Route(uci, rule_sets, outbounds) {
     };
 
     for (let rule_set in values(rule_sets)) {
-        if (rule_set.type == 'inline') { 
-            // 先将 1.10 引入的 inline 类型特殊处理一下，因为我路由器上还是 1.8.x
-            
-        } else {
-            push(result.rule_set, rule_set);
-        }
+        push(result.rule_set, rule_set);
     }
 
     const route_section = uci.get_all(CONF_NAME, 'route');

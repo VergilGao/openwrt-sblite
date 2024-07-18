@@ -29,8 +29,6 @@ export function Outbound(uci) {
         }
     });
 
-    log_tab('%J', nodes);
-
     uci.foreach(CONF_NAME, 'outbound', section => {
         if (section.type == 'node') {
             if (result[section.tag]) {

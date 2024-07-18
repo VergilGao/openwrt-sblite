@@ -4,6 +4,19 @@ import { popen, open as fopen } from 'fs';
 
 const LOG_FILE = '/tmp/log/sblite.log';
 
+export function call_system_command(command) {
+    const handle = popen(command);
+    if (handle) {
+        let content = handle.read('all');
+        handle.close();
+        content = trim(content);
+
+        if (content != null) {
+            return content;
+        }
+    }
+};
+
 // return the content of wget output
 export function wget(url, ua, no_certificate) {
     let addition_parameters = '';

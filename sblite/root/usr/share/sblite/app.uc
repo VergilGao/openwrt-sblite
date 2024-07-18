@@ -9,9 +9,12 @@ import { SingBoxOption } from './singbox.uc';
 import * as LOGLEVEL from './loglevel.uc';
 import { Outbound } from './outbound.uc';
 import { RuleSet } from './rule.uc';
+import { Route } from './route.uc';
+import { mkdir } from 'fs';
 
 function start() {
-    system('mkdir -p /tmp/sblite');
+    mkdir('/tmp/sblite');
+    mkdir('/tmp/sblite/rule_sets');
 
     const uci = cursor();
 
@@ -29,9 +32,11 @@ function start() {
     const enable = true;
 
     if (enable) {
+        log_t('starting...');
         start_crontab();
         const outbounds = Outbound(uci);
         const rule_sets = RuleSet(uci, outbounds);
+        print(values(rule_sets) + '\n');
 
         const config = SingBoxOption();
         config.logOption(true, LOGLEVEL.ERROR);
@@ -51,10 +56,13 @@ function start() {
         }
 
         // 然后是重头戏，路由
+        config.route = Route(uci, rule_sets, outbounds);
 
 
         print(config + '\n');
         config.write();
+
+        log_t('Done.');
     } else {
         stop_crontab();
     }
