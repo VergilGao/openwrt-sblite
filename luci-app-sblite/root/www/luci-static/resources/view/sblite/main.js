@@ -10,6 +10,8 @@
 
 const config_name = 'sblite';
 const ENABLE_CONFIG_NAME = 'enable';
+const REJECT_OUTBOUND_TAG = 'Reject';
+const DNS_OUTBOUND_TAG = 'dns-out';
 
 const callSubscribe = rpc.declare({
     object: 'luci.sblite',
@@ -136,6 +138,7 @@ function render_rules(parent) {
     o = parent.option(form.ListValue, 'final', _('Default Outbound'), _('Default outbound tag.'));
     o.depends('custom_default', '1');
     o.rmempty = true;
+    o.value(REJECT_OUTBOUND_TAG, _('Reject'));
     uci.sections(config_name, 'outbound', function (s, section_id) {
         o.value(s.tag);
     });
@@ -168,9 +171,11 @@ function render_rules(parent) {
         }
 
         o = s.option(form.ListValue, 'outbound', _('Outbound'));
+        o.value(REJECT_OUTBOUND_TAG, _('Reject'));
         uci.sections(config_name, 'outbound', function (s, section_id) {
             o.value(s.tag);
         });
+        
 
         o = s.option(form.Flag, 'invert', _('Invert'), _('Invert match result.'));
         o.rmempty = false;
@@ -326,11 +331,11 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
             o.rmempty = false;
             o.datatype = 'string';
             o.validate = (section_id, value) => {
-                if (value !== 'any') {
+                if (value !== 'any' || value !== DNS_OUTBOUND_TAG || value !== REJECT_OUTBOUND_TAG) {
                     return unique_tag('outbound', section_id, value);
                 }
 
-                return _('Outbound tag couldn\'t be "any"');
+                return _(`Outbound tag couldn\'t be "${value}"`);
             }
         }
 
