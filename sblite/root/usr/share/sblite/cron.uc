@@ -5,7 +5,7 @@ import { APP_FILE, CONF_NAME } from './const.uc';
 
 function clean() {
     system('touch /etc/crontabs/root');
-    system(`sed -i "#sh ${APP_FILE} subscribe cfg.* > /dev/null 2>&1 &#d" /etc/crontabs/root`);
+    system(`sed -i "/sh ${replace(APP_FILE, '/', '\\/')} subscribe cfg.* > \\/dev\\/null 2>&1 &/d" /etc/crontabs/root`);
 }
 
 export function start() {
