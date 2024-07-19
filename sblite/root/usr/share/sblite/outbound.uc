@@ -1,6 +1,6 @@
 'use strict';
 import { log_tab } from './utils.uc';
-import { CONF_NAME } from './const.uc';
+import { CONF_NAME, REJECT_OUTBOUND_TAG, DNS_OUTBOUND_TAG } from './const.uc';
 import { TYPE as vmess_type, outbound as vmess_outbound } from './protocols/vmess.uc';
 
 export function Outbound(uci) {
@@ -64,6 +64,7 @@ export function Outbound(uci) {
             }
         }
     });
+    
     // 然后找 urltest
     uci.foreach(CONF_NAME, 'outbound', section => {
         if (section.type == 'urltest') {
@@ -93,6 +94,17 @@ export function Outbound(uci) {
             }
         }
     });
+
+    // 最后添加 BLOCK 出站和 DNS 出站
+    result[REJECT_OUTBOUND_TAG] = {
+        type: 'block',
+        tag: REJECT_OUTBOUND_TAG,
+    };
+
+    result[DNS_OUTBOUND_TAG] = {
+        type: 'dns',
+        tag: DNS_OUTBOUND_TAG,
+    };
 
     return result;
 };

@@ -18,3 +18,6 @@ export const UDP_IN_TAG = 'udp-in';
 export const DNS_IN_TAG = 'dns-in';
 
 export const FAKE_IP_TAG = 'fake_ip';
+
+export const REJECT_OUTBOUND_TAG = 'Reject';
+export const DNS_OUTBOUND_TAG = 'dns-out';

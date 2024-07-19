@@ -28,16 +28,13 @@ function start() {
 
     uci.commit();
 
-    //const enable = uci.get(CONF_NAME, 'main', 'enable') == '1';
-    const enable = true;
+    const enable = uci.get(CONF_NAME, 'main', 'enable') == '1';
 
     if (enable) {
         log_t('starting...');
         start_crontab();
         const outbounds = Outbound(uci);
         const rule_sets = RuleSet(uci, outbounds);
-        print(values(rule_sets) + '\n');
-
         const config = SingBoxOption();
         config.logOption(true, LOGLEVEL.ERROR);
         config.cacheFileOption(true);

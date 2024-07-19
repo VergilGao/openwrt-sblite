@@ -18,6 +18,4 @@ start_service() {
     procd_set_param pidfile /var/run/${CONFIG}.pid
 
     procd_close_instance
-	# [ $? == 1 ] && ucode -D '{ "action": "log", "params": "another $CONFIG instance is running...exit" }' $APP_FILE && exit 0
-	# $APP_FILE start
 }
