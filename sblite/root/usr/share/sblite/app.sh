@@ -18,5 +18,8 @@ case "$method" in
             return -1
         ;;
     subscribe) ucode -D action=subscribe -D params="$1" $APP_FILE ;;
+    stop)
+        rm -rf /tmp/sblite
+        ucode -D action=stop $APP_FILE
     *) ;;
 esac

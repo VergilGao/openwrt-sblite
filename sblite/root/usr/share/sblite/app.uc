@@ -88,7 +88,12 @@ switch (action) {
     case 'start':
         start();
         break;
-
+    case 'stop':
+        const uci = cursor();
+        uci.set(CONF_NAME, 'main', 'enable', '0'); 
+        uci.commit();
+        start();
+        break;
     case 'subscribe':
         subscribe(params);
         break;
