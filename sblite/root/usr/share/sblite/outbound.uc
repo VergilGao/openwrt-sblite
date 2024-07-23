@@ -1,4 +1,5 @@
 'use strict';
+
 import { log_tab } from './utils.uc';
 import { CONF_NAME, REJECT_OUTBOUND_TAG, DNS_OUTBOUND_TAG } from './const.uc';
 import { TYPE as vmess_type, outbound as vmess_outbound } from './protocols/vmess.uc';

@@ -3,6 +3,7 @@
 import { popen, open as fopen } from 'fs';
 import { LOG_PATH, DB_PATH, CONFIG_PATH } from './const.uc';
 import { CLASH_PORT } from './default.uc';
+import { call_system_command, log_t } from './utils.uc';
 
 function version() {
     let result = {
@@ -116,8 +117,6 @@ export function SingBoxOption() {
                 fp.write('\n');
                 fp.close();
             }
-
-            system(sprintf('sing-box format -w -c %s', CONFIG_PATH));
         }
     });
 };

@@ -50,7 +50,7 @@ export function parse(content, result) {
 
 export function outbound(section) {
     return {
-        type: 'vmess',
+        type: TYPE,
         tag: section.tag,
         server: section.server,
         server_port: int(section.server_port),

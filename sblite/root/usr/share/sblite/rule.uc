@@ -232,7 +232,7 @@ function rule_set(section, headless_rules, sub_rules, outbounds) {
                 return;
             }
 
-            if (section.default_detour == '0' && section.download_detour) {
+            if (section.cutom_detour == '1' && section.download_detour) {
                 if (outbounds[section.download_detour]) {
                     remote.download_detour = section.download_detour;
                 } else {

@@ -45,12 +45,13 @@ This repository is under development and cannot be used properly.
 ## TODO:
 
 - [ ] init.d script
-- [ ] sing-box config generate
+- [x] sing-box config generate
 - [x] subscribe cron job
 - [ ] other cron job
 - [ ] Makefile
-- [ ] DNS config
+- [x] DNS config
 - [x] Rule set
+- [ ] nftables scripts
 
 ## Tanks
 

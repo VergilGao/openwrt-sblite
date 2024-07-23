@@ -10,12 +10,9 @@ import * as LOGLEVEL from './loglevel.uc';
 import { Outbound } from './outbound.uc';
 import { RuleSet } from './rule.uc';
 import { Route } from './route.uc';
-import { mkdir } from 'fs';
+import { DNS } from './dns.uc';
 
 function start() {
-    mkdir('/tmp/sblite');
-    mkdir('/tmp/sblite/rule_sets');
-
     const uci = cursor();
 
     // purne node config
@@ -36,27 +33,49 @@ function start() {
         const outbounds = Outbound(uci);
         const rule_sets = RuleSet(uci, outbounds);
         const config = SingBoxOption();
+        if (uci.get(CONF_NAME, 'main', 'loglevel') != '0') {
+            let level;
+            switch (uci.get(CONF_NAME, 'main', 'log')) {
+                case 'trace': level = LOGLEVEL.TRACE; break;
+                case 'debug': level = LOGLEVEL.DEBUG; break;
+                case 'info': level = LOGLEVEL.INFO; break;
+                case 'warn': level = LOGLEVEL.WARN; break;
+                case 'error': level = LOGLEVEL.ERROR; break;
+                case 'fatal': level = LOGLEVEL.FATAL; break;
+                case 'panic': level = LOGLEVEL.PANIC; break;
+                default: level = LOGLEVEL.ERROR; break;
+            }
+            config.logOption(true, level);
+        } else {
+            config.logOption(false);
+        }
         config.logOption(true, LOGLEVEL.ERROR);
         config.cacheFileOption(true);
-        config.clashOption({
-            host: '127.0.0.11',
-            port: 9090,
-            ui: '',
-            download_url: 'https://github.com/MetaCubeX/Yacd-meta/archive/gh-pages.zip',
-            download_detour: 'direct',
-            secret: '',
-            default_mode: 'Rule',
-        });
-
-        for (let outbound in values(outbounds)) {
-            push(config.outbounds, outbound);
-        }
-
+        // 出站
+        config.outbounds = values(outbounds);
+        const inbounds = {
+            redirect_tcp: {
+                type: 'redirect',
+                tag: 'redirect_tcp',
+                listen: '::',
+                listen_port: 18008,
+                sniff: true,
+                sniff_override_destination: true,
+            },
+            tproxy_udp: {
+                type: 'tproxy',
+                tag: 'tproxy_udp',
+                network: 'udp',
+                listen: '::',
+                listen_port: 18008,
+                sniff: true,
+                sniff_override_destination: true,
+            },
+        };
+        config.dns = DNS(uci, rule_sets, inbounds, outbounds);
         // 然后是重头戏，路由
         config.route = Route(uci, rule_sets, outbounds);
-
-
-        print(config + '\n');
+        config.inbounds = values(inbounds);
         config.write();
 
         log_t('Done.');

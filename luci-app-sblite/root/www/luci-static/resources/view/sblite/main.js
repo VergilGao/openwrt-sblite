@@ -7,11 +7,14 @@
 'require ui';
 'require network';
 'require view';
+'require validation';
 
 const config_name = 'sblite';
 const ENABLE_CONFIG_NAME = 'enable';
-const REJECT_OUTBOUND_TAG = 'Reject';
+const REJECT_OUTBOUND_TAG = 'reject';
 const DNS_OUTBOUND_TAG = 'dns-out';
+const DNS_FAKE_IP_TAG = 'fakeip';
+const DNS_BLOCK_TAG = 'block';
 
 const callSubscribe = rpc.declare({
     object: 'luci.sblite',
@@ -40,27 +43,6 @@ return view.extend({
                 async function () {
                     await uci.load(config_name);
                     return;
-                    const div = document.getElementById('maincontent');
-
-                    const content = E('div',);
-
-                    const modal = E('div', {
-                        id: 'sblite-modal'
-                    }, content);
-
-                    let style = div.style;
-                    style.display = 'none';
-                    style.padding = '20px';
-                    style.zIndex = '1';
-                    style.position = 'fixed';
-                    style.left = '0';
-                    style.top = '0';
-                    style.width = '100%';
-                    style.height = '100%';
-                    style.overflow = 'auto';
-                    style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-
-                    div.appendChild(modal);
                 }(),
 
                 async function () {
@@ -108,7 +90,22 @@ return view.extend({
 
         o = s.taboption(tabName, form.Flag, ENABLE_CONFIG_NAME, _('Enable Server'));
         o.rmempty = false;
-        o.default = false;
+
+        o = s.taboption(tabName, form.Flag, 'log', _('Enable Logger'));
+        o.rmempty = false;
+        o.default = true;
+
+        o = s.taboption(tabName, form.ListValue, 'loglevel', _('Log Level'));
+        o.depends('log', '1');
+        o.rmempty = false;
+        o.value('trace', _('Trace'));
+        o.value('debug', _('Debug'));
+        o.value('info', _('Info'));
+        o.value('warn', _('Warn'));
+        o.value('error', _('Error'));
+        o.value('fatal', _('Fatal'));
+        o.value('panic', _('Panic'));
+        o.default = 'error';
 
         render_rules(s.taboption(
             tabName,
@@ -134,14 +131,10 @@ function render_rules(parent) {
     let s, o;
 
     o = parent.option(form.Flag, 'custom_default', _('Custom Default Outbound'), _('The first outbound will be used if not set.'));
-    o.default = false;
     o = parent.option(form.ListValue, 'final', _('Default Outbound'), _('Default outbound tag.'));
     o.depends('custom_default', '1');
-    o.rmempty = true;
     o.value(REJECT_OUTBOUND_TAG, _('Reject'));
-    uci.sections(config_name, 'outbound', function (s, section_id) {
-        o.value(s.tag);
-    });
+    uci.sections(config_name, 'outbound', s => o.value(s.tag));
 
     s = parent.option(
         form.SectionValue,
@@ -172,10 +165,7 @@ function render_rules(parent) {
 
         o = s.option(form.ListValue, 'outbound', _('Outbound'));
         o.value(REJECT_OUTBOUND_TAG, _('Reject'));
-        uci.sections(config_name, 'outbound', function (s, section_id) {
-            o.value(s.tag);
-        });
-        
+        uci.sections(config_name, 'outbound', s => o.value(s.tag));
 
         o = s.option(form.Flag, 'invert', _('Invert'), _('Invert match result.'));
         o.rmempty = false;
@@ -192,7 +182,7 @@ function render_rules(parent) {
         Object.keys(protocol_selections).forEach(key => o.value(key, protocol_selections[key]));
 
         o = s.option(form.MultiValue, 'rule_set', _('Rule Sets'));
-        uci.sections(config_name, 'rule_set', function (s, section_id) {
+        uci.sections(config_name, 'rule_set', s => {
             if (s.sub !== '1' && s.type !== 'headless') {
                 o.value(s.tag);
             }
@@ -232,6 +222,13 @@ function render_rules(parent) {
 }
 
 function render_dns_tab(parent) {
+    const strategys = {
+        'prefer_ipv4': _('Perfer IPv4'),
+        'prefer_ipv6': _('Perfer IPv6'),
+        'ipv4_only': _('IPv4 Only'),
+        'ipv6_only': _('IPv6 Only'),
+    };
+
     const tabName = 'dns';
     let s, o;
 
@@ -252,8 +249,6 @@ function render_dns_tab(parent) {
     o.default = 7535;
 
     o = s.option(form.Flag, 'fake_ip', _('Use Fake IP'));
-    o.rmempty = false;
-    o.default = true;
 
     o = s.option(form.Value, 'fake_ip_inet4_range', _('Fake IP IPv4 Address Range'));
     o.rmempty = false;
@@ -268,13 +263,12 @@ function render_dns_tab(parent) {
     o.default = 'fc00::/18';
 
     o = s.option(form.Flag, 'custom_default', _('Custom Default DNS'), _('The first dns server will be used if not set.'));
-    o.default = false;
     o = s.option(form.ListValue, 'final', _('Default DNS'), _('Default dns server tag.'));
     o.depends('custom_default', '1');
-    o.rmempty = true;
-    uci.sections(config_name, 'dns_server', function (s, section_id) {
-        o.value(s.tag);
-    });
+    uci.sections(config_name, 'dns_server', s => o.value(s.tag));
+
+    o = s.option(form.ListValue, 'strategy', _('Default Strategy'), _('Default domain strategy for resolving the domain names.'));
+    Object.keys(strategys).forEach(key => o.value(key, strategys[key]));
 
     s = parent.taboption(
         tabName,
@@ -288,6 +282,92 @@ function render_dns_tab(parent) {
     s.anonymous = true;
     s.sortable = true;
 
+    s.modaltitle = function (section_id) {
+        let name = uci.get(config_name, section_id, 'tag');
+        return _('DNS Server Configuration') + ' » ' + (name ?? _('new dns server'));
+    };
+
+    s.sectiontitle = section_id => uci.get(config_name, section_id, 'tag');
+
+    s.addModalOptions = function (s, section_id) {
+        if (!uci.get(config_name, section_id, 'tag')) {
+            o = s.option(form.Value, 'tag', _('Server Tag'));
+            o.rmempty = false;
+            o.datatype = 'string';
+            o.validate = (section_id, value) => {
+                if (value !== DNS_FAKE_IP_TAG || value !== DNS_BLOCK_TAG || value.startsWith('DHCP')) {
+                    return unique_tag('dns_server', section_id, value);
+                }
+
+                return _(`DNS Server tag couldn\'t be "${value}"`);
+            }
+        }
+
+        o = s.option(form.ListValue, 'proto', _('Protocol'));
+        o.rmempty = false;
+        o.datatype = 'string';
+        o.value('TCP', _('TCP'));
+        o.value('UDP', _('UDP'));
+        o.value('TLS', _('TLS'));
+        o.value('HTTPS', _('HTTPS'));
+        o.value('QUIC', _('QUIC'));
+        o.value('HTTP3', _('HTTP3')); // validation.types
+        o.default = 'UDP';
+
+        o = s.option(form.Value, 'ip_address', _('Address'), _('IP Address'));
+        o.depends('proto', 'TCP');
+        o.depends('proto', 'UDP');
+        o.depends('proto', undefined);
+        o.depends({ proto: 'TLS', resolver: '0' });
+        o.depends({ proto: 'HTTPS', resolver: '0' });
+        o.depends({ proto: 'QUIC', resolver: '0' });
+        o.depends({ proto: 'HTTP3', resolver: '0' });
+        o.depends({ proto: 'TLS', resolver: undefined });
+        o.depends({ proto: 'HTTPS', resolver: undefined });
+        o.depends({ proto: 'QUIC', resolver: undefined });
+        o.depends({ proto: 'HTTP3', resolver: undefined });
+        o.ucioption = 'address';
+
+        o = s.option(form.Value, 'domain', _('Address'), _('Domain Address'));
+        o.depends({ proto: 'TLS', resolver: '1' });
+        o.depends({ proto: 'HTTPS', resolver: '1' });
+        o.depends({ proto: 'QUIC', resolver: '1' });
+        o.depends({ proto: 'HTTP3', resolver: '1' });
+        o.ucioption = 'address';
+
+        o = s.option(form.ListValue, 'strategy', _('Strategy'), _('Default domain strategy for resolving the domain names.'));
+        o.rmempty = false;
+        Object.keys(strategys).forEach(key => o.value(key, strategys[key]));
+
+        o = s.option(form.Flag, 'custom_detour', _('Custom Outbound'), _('Use custom outbound to the dns server.'));
+        o = s.option(form.ListValue, 'detour', _('Outbound'), _('Tag of an outbound for connecting to the dns server.'));
+        o.depends('custom_detour', '1');
+        o.rmempty = false;
+        uci.sections(config_name, 'outbound', s => o.value(s.tag));
+
+        o = s.option(form.Flag, 'resolver', _('Resolver'), _('Required if address contains domain'));
+        o.rmempty = false;
+        o.depends('proto', 'TLS');
+        o.depends('proto', 'HTTPS');
+        o.depends('proto', 'QUIC');
+        o.depends('proto', 'HTTP3');
+
+        o = s.option(form.ListValue, 'resolver_tag', _('Resolver Tag'), _('Tag of a another server to resolve the domain name in the address.'));
+        o.rmempty = false;
+        o.depends('resolver', '1');
+        o.value(_('DHCP'));
+        uci.sections(config_name, 'dns_server', s => {
+            if (s['.name'] !== section_id) {
+                o.value(s.tag);
+            }
+        });
+
+        o = s.option(form.ListValue, 'resolver_strategy', _('Resolver Strategy'), _('The domain strategy for resolving the domain name in the address.'));
+        o.rmempty = false;
+        o.depends('resolver', '1');
+        Object.keys(strategys).forEach(key => o.value(key, strategys[key]));
+    };
+
     s = parent.taboption(
         tabName,
         form.SectionValue,
@@ -299,6 +379,33 @@ function render_dns_tab(parent) {
     s.addremove = true;
     s.anonymous = true;
     s.sortable = true;
+
+    s.modaltitle = function (section_id) {
+        let name = uci.get(config_name, section_id, 'tag');
+        return _('DNS Rule Configuration') + ' » ' + (name ?? _('new dns rule'));
+    };
+
+    s.sectiontitle = section_id => uci.get(config_name, section_id, 'tag');
+
+    s.addModalOptions = function (s, section_id) {
+        if (!uci.get(config_name, section_id, 'tag')) {
+            o = s.option(form.Value, 'tag', _('Rule Tag'));
+            o.rmempty = false;
+            o.datatype = 'string';
+            o.validate = (section_id, value) => unique_tag('dns_server', section_id, value);
+        }
+
+        o = s.option(form.ListValue, 'server', _('Server'));
+        uci.sections(config_name, 'dns_server', s => o.value(s.tag));
+
+        o = s.option(form.MultiValue, 'rule_set', _('Rule Sets'));
+        uci.sections(config_name, 'rule_set', s => {
+            if (s.sub !== '1' && s.type !== 'headless') {
+                o.value(s.tag);
+            }
+        });
+        o.value(DNS_BLOCK_TAG, 'BLOCK');
+    }
 }
 
 function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
@@ -358,7 +465,7 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
         o = s.option(form.ListValue, 'node', _('Outbound Node'));
         o.rmempty = false;
         o.depends('type', 'node');
-        uci.sections(config_name, 'node', function (s, section_id) {
+        uci.sections(config_name, 'node', (s, section_id) => {
             let value = section_id;
             if (s.group) {
                 value = s.hashkey;
@@ -369,7 +476,7 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
         o = s.option(form.ListValue, 'outbound', _('Outbound Tag'));
         o.rmempty = false;
         o.depends('type', 'node');
-        uci.sections(config_name, 'outbound', function (s, section_id) {
+        uci.sections(config_name, 'outbound', s => {
             if (s.type == 'direct') {
                 o.value(s.tag);
             }
@@ -378,7 +485,7 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
         o = s.option(form.MultiValue, 'include', _('Include Outbound'), _('List of outbound tags to test.'));
         o.rmempty = false;
         o.depends('type', 'urltest');
-        uci.sections(config_name, 'outbound', function (s) {
+        uci.sections(config_name, 'outbound', s => {
             if (s.type !== 'urltest' && s['.name'] !== section_id) {
                 o.value(s.tag);
             }
@@ -406,7 +513,7 @@ function render_outbound_tab(parent, wanInterfaces, lanInterfaces) {
             case 'node':
                 let node = uci.get(config_name, section_id, 'node');
                 if (!node.startsWith('cfg')) {
-                    uci.sections(config_name, 'node', function (s, section_id) {
+                    uci.sections(config_name, 'node', (s, section_id) => {
                         if (s.group && s.hashkey === node) {
                             node = section_id;
                         }
@@ -661,10 +768,9 @@ function render_subscription_tab(parent) {
         return E('button', {
             class: 'btn cbi-button-negative',
             click: ui.createHandlerFn(this, function (section_id) {
-                const outbounds = uci.sections(config_name, 'node');
-                outbounds.forEach(section => {
-                    if (section.group === section_id) {
-                        parent.map.data.remove(config_name, section['.name']);
+                const outbounds = uci.sections(config_name, 'node', s => {
+                    if (s.group === section_id) {
+                        parent.map.data.remove(config_name, section_id);
                     }
                 });
 
@@ -770,9 +876,10 @@ function render_rule_set_tab(parent) {
 
         const headless_rule_tags = [];
 
-        uci.sections(config_name, 'rule_set').forEach(element => {
-            if (element.type === 'headless' && element.sub !== '1' && element['.name'] !== section_id)
-                headless_rule_tags.push(element.tag);
+        uci.sections(config_name, 'rule_set', s => {
+            if (s.type === 'headless' && s.sub !== '1' && s['.name'] !== section_id) {
+                headless_rule_tags.push(s.tag);
+            }
         });
 
         if (headless_rule_tags.length > 0) {
@@ -800,15 +907,12 @@ function render_rule_set_tab(parent) {
         o = s.option(form.Value, 'url', _('Download URL'), _('Download URL of rule-set. Will auto update everyday'));
         o.depends('type', 'remote');
 
-        o = s.option(form.Flag, 'default_detour', _('Default Download Outbound'), _('Use default outbound to download rule-set.'));
+        o = s.option(form.Flag, 'cutom_detour', _('Custom Download Outbound'), _('Use custom outbound to download rule-set.'));
         o.depends('type', 'remote');
-        o.default = true;
 
         o = s.option(form.ListValue, 'download_detour', _('Download Outbound'), _('Tag of the outbound to download rule-set.'));
-        o.depends('default_detour', '0');
-        uci.sections(config_name, 'outbound', function (s, section_id) {
-            o.value(s.tag);
-        });
+        o.depends('cutom_detour', '1');
+        uci.sections(config_name, 'outbound', s => o.value(s.tag));
 
         o = s.option(form.Flag, 'sub', _('Sub Rule Set'), _('Is this part of another rule set.'));
         o.depends('type', 'headless');
@@ -821,10 +925,10 @@ function render_rule_set_tab(parent) {
         o.rmempty = false;
 
         const sub_rule_tags = [];
-
-        uci.sections(config_name, 'rule_set').forEach(element => {
-            if (element.type === 'headless' && element.sub === '1' && element['.name'] !== section_id)
-                sub_rule_tags.push(element.tag);
+        uci.sections(config_name, 'rule_set', s => {
+            if (s.type === 'headless' && s.sub === '1' && s['.name'] !== section_id) {
+                sub_rule_tags.push(s.tag);
+            }
         });
 
         if (sub_rule_tags.length > 1) {
