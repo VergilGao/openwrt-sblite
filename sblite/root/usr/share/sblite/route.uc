@@ -1,6 +1,6 @@
 'use strict';
 
-import { CONF_NAME, DNS_IN_TAG, DNS_OUTBOUND_TAG } from './const.uc';
+import { CONF_NAME } from './const.uc';
 import { log_tab, delete_empty_arr } from './utils.uc';
 
 export function Route(uci, rule_sets, outbounds) {
@@ -61,14 +61,6 @@ export function Route(uci, rule_sets, outbounds) {
         }
 
         push(result.rules, rule);
-    });
-
-    push(result.rules, {
-        outbound: DNS_OUTBOUND_TAG,
-        inbound: [
-            DNS_IN_TAG
-        ],
-        protocol: 'dns',
     });
 
     return result;

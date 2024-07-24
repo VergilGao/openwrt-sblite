@@ -72,7 +72,7 @@ function start() {
                 sniff_override_destination: true,
             },
         };
-        config.dns = DNS(uci, rule_sets, inbounds, outbounds);
+        config.dns = DNS(uci, rule_sets, outbounds);
         // 然后是重头戏，路由
         config.route = Route(uci, rule_sets, outbounds);
         config.inbounds = values(inbounds);

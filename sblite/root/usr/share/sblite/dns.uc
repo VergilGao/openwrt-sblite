@@ -1,15 +1,14 @@
 'use strict';
 
 import { log_tab, asip, asport } from './utils.uc';
-import { CONF_NAME, DNS_IN_TAG, DNS_BLOCK_TAG, FAKE_IP_TAG } from './const.uc';
-import { DNS_PORT as DEFAULT_DNS_PORT } from './default.uc';
+import { CONF_NAME, DNS_BLOCK_TAG, FAKE_IP_TAG } from './const.uc';
 
 export const PREFER_IPV4 = 'prefer_ipv4';
 export const PREFER_IPV6 = 'prefer_ipv6';
 export const ONLY_IPV4 = 'ipv4_only';
 export const ONLY_IPV6 = 'ipv6_only';
 
-export function DNS(uci, rule_sets, inbounds, outbounds) {
+export function DNS(uci, rule_sets, outbounds) {
     const result = {
         final: '',
         strategy: '',
@@ -20,23 +19,6 @@ export function DNS(uci, rule_sets, inbounds, outbounds) {
     };
 
     const servers = {};
-
-    let listen_port = uci.get(CONF_NAME, 'dns', 'listen_port');
-    listen_port = asport(listen_port);
-    if (listen_port && !listen_port.range) {
-        listen_port = listen_port.value;
-    } else {
-        listen_port = DEFAULT_DNS_PORT;
-    }
-
-    inbounds[DNS_IN_TAG] = {
-        type: 'direct',
-        tag: DNS_IN_TAG,
-        sniff: true,
-        listen: '127.0.0.1',
-        listen_port: listen_port,
-        network: 'udp',
-    };
 
     uci.foreach(CONF_NAME, 'dns_server', section => {
         let strategy = section.strategy;
