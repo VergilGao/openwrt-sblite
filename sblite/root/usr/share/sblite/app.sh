@@ -21,5 +21,6 @@ case "$method" in
     stop)
         rm -rf /tmp/sblite
         ucode -D action=stop $APP_FILE
+        ;;
     *) ;;
 esac
