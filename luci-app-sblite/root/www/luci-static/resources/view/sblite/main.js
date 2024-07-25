@@ -117,6 +117,7 @@ return view.extend({
             _('Route Settings')
         ).subsection);
 
+        render_access_control_tab(s);
         render_dns_tab(s);
         render_outbound_tab(s, wanInterfaces, lanInterfaces);
         render_nodes_tab(s);
@@ -219,6 +220,52 @@ function render_rules(parent) {
             return '';
         }
     }
+}
+
+function render_access_control_tab(parent) {
+    const tabName = 'access_control';
+    let s, o;
+    parent.tab(tabName, _('Access Control'));
+
+    o = parent.taboption(tabName, form.DummyValue, '_description_text', '');
+    o.cfgvalue = function () { return E('div', _('Packets are shunted ahead of time before they enter the sing-box core')); };
+    o.write = function () { };
+
+    s = parent.taboption(
+        tabName,
+        form.SectionValue,
+        'access_control',
+        form.NamedSection,
+        'access_control',
+        'sing_box',
+        '')
+        .subsection;
+
+    o = s.option(form.ListValue, 'mode', _('Filter Mode'));
+    o.value('0', _('Disable'));
+    o.value('1', _('Blacklist'));
+    o.value('2', _('Whitelist'));
+    
+    o = s.option(form.DynamicList, 'black_ip4addr', _('Blacklist IPv4 Address'));
+    o.rmempty = false;
+    o.depends('mode', '1');
+    o.datatype = 'ip4addr';
+    o = s.option(form.DynamicList, 'black_ip6addr', _('Blacklist IPv6 Address'));
+    o.depends('mode', '1');
+    o.datatype = 'ip6addr';
+    o = s.option(form.DynamicList, 'black_macaddr', _('Blacklist MAC Address'));
+    o.depends('mode', '1');
+    o.datatype = 'macaddr';
+
+    o = s.option(form.DynamicList, 'white_ip4addr', _('Whitelist IPv4 Address'));
+    o.depends('mode', '2');
+    o.datatype = 'ip4addr';
+    o = s.option(form.DynamicList, 'white_ip6addr', _('Whitelist IPv6 Address'));
+    o.depends('mode', '2');
+    o.datatype = 'ip6addr';
+    o = s.option(form.DynamicList, 'white_macaddr', _('Whitelist MAC Address'));
+    o.depends('mode', '2');
+    o.datatype = 'macaddr';
 }
 
 function render_dns_tab(parent) {
